@@ -5,6 +5,7 @@ export const CATEGORIES = {
   barter: '交换品', gear: '背包 / 装备', containers: '容器', other: '其他'
 };
 export const FRESH_MS = 60 * 60 * 1000;
+export const LONG_TERM_SLOT_MIN = 30000;
 // Explicit, reviewable exclusions. This is not a complete source of spawn availability.
 export const EVENT_IDS = new Set([
   '59ef13ca86f77445fd0e2483', '5a43943586f77416ad2f06e2', '5a43957686f7742a2c2f11b0',
@@ -24,6 +25,7 @@ export function normalizeProfile(input = {}) {
   const levels = (map, max) => Object.fromEntries(Object.entries(map || {}).filter(([k]) => /^[a-z0-9-]{1,64}$/i.test(k)).map(([k,v]) => [k, number(v,0,max,0)]));
   return {
     maxProgress:input.maxProgress!==false,
+    progressConfigured:input.progressConfigured===true,
     playerLevel:number(input.playerLevel,1,79), intelligence:input.maxProgress!==false?3:number(input.intelligence,0,3,3),
     management:number(input.management,0,51,0), fuelPerHour:0,
     traderLevels:levels(input.traderLevels,4), stationLevels:levels(input.stationLevels,10), stationFuel:levels(input.stationFuel,10000000),
@@ -33,6 +35,34 @@ export function normalizeProfile(input = {}) {
     materialMode:input.materialMode==='owned'?'owned':'buy', onlyExecutable:input.onlyExecutable===true, includeEvents:input.includeEvents===true,
     stack:input.stack==='full'?'full':'single'
   };
+}
+export function stationMaxLevel(station,data) {
+  return Number.isFinite(station.maxLevel)?station.maxLevel:Math.max(station.slug==='intelligence-center'?3:0,...(data.crafts||[]).filter(c=>c.station===station.id).map(c=>Number(c.level)||0));
+}
+export function traderMaxLevel(trader) { return Math.max(1,...(trader.levels||[]).map(l=>Number(l.level)||0)); }
+export function profileTaskIds(data) {
+  return [...new Set([...Object.keys(data.tasks||{}),...(data.barters||[]).map(r=>r.taskUnlock),...(data.crafts||[]).map(r=>r.taskUnlock),...values(data.items).flatMap(i=>(i.buy||[]).map(o=>o.taskUnlock))])].filter(id=>/^[0-9a-f]{24}$/.test(id||''));
+}
+// Materialize the full-progress default once. Subsequent user edits remain explicit.
+export function resolvePlayerProfile(input,data,reset=false) {
+  const p=normalizeProfile(input);
+  if(reset || (!p.progressConfigured && p.maxProgress)) {
+    p.playerLevel=reset?79:(p.playerLevel||79);
+    p.stationLevels=Object.fromEntries(values(data.stations).map(s=>[s.id,stationMaxLevel(s,data)]));
+    p.traderLevels=Object.fromEntries(values(data.traders).map(t=>[t.id,traderMaxLevel(t)]));
+    p.completedTasks=profileTaskIds(data);
+  }
+  p.maxProgress=false;p.progressConfigured=true;p.stack='single';
+  const intelligence=values(data.stations).find(s=>s.slug==='intelligence-center');
+  if(intelligence && p.stationLevels[intelligence.id]!==undefined)p.intelligence=p.stationLevels[intelligence.id];
+  return p;
+}
+export function hasFullProgress(profile,data) {
+  if(profile.maxProgress)return true;
+  return profile.playerLevel>=Math.max(data.flea?.minPlayerLevel||15,...values(data.items).map(i=>i.fleaLevel||0)) &&
+    values(data.stations).every(s=>(profile.stationLevels?.[s.id]??-1)>=stationMaxLevel(s,data)) &&
+    values(data.traders).every(t=>(profile.traderLevels?.[t.id]??-1)>=traderMaxLevel(t)) &&
+    profileTaskIds(data).every(id=>profile.completedTasks?.includes(id));
 }
 // A browsing scope, not a claim about spawn probability or a particular map.
 export function isScavengingItem(item) {
@@ -88,14 +118,18 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
   const names = {
     workbench: '工作台', medstation: '医疗站', lavatory: '洗手间', 'nutrition-unit': '营养部',
     'intelligence-center': '情报中心', 'booze-generator': '酿酒器', 'water-collector': '净水器',
-    'bitcoin-farm': '比特币矿场', 'christmas-tree': '圣诞树', 'cultist-circle': '邪教徒法阵'
+    'bitcoin-farm': '比特币矿场', 'christmas-tree': '圣诞树', 'cultist-circle': '邪教徒法阵',
+    library:'图书馆',gym:'健身房','shooting-range':'靶场','scav-case':'Scav宝箱','gear-rack':'装备架',
+    heating:'供暖',generator:'发电机',vents:'通风',security:'安全门',stash:'仓库','rest-space':'休息区',
+    illumination:'照明','hall-of-fame':'荣誉大厅','air-filtering-unit':'空气过滤器','solar-power':'太阳能',
+    'defective-wall':'破损的墙','weapon-rack':'武器架'
   };
   const stations = {};
   for (const s of values(parts.hideout.data)) {
-    stations[s.id] = { id: s.id, name: names[s.normalizedName] || s.normalizedName, slug: s.normalizedName, image: s.imageLink };
+    stations[s.id] = { id: s.id, name: names[s.normalizedName] || s.normalizedName, slug: s.normalizedName, image: s.imageLink, maxLevel:Math.max(0,...(s.levels||[]).map(l=>l.level||0)) };
   }
   return {
-    version: 2, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
+    version: 2, profileMetadataVersion:1, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
     rawCount: Object.keys(raw.items).length, flea: raw.fleaMarket, items, traders, stations,
     barters: parts.barters.data, crafts: parts.crafts.data, history: {},
     tasks:parts.tasks?.data || {}, taskNames:parts.tasks_zh?.data || {}
@@ -333,16 +367,16 @@ export function analyzeHistory(points, item, data, options = {}, now = Date.now(
     const price=median(list),fee=fleaFee(item.basePrice,price,data.flea,options.intelligence||0,options.management||0,stackCount);
     return fee===null?null:(price*stackCount-fee)/(item.width*item.height);
   }).filter(Number.isFinite).sort((a,b)=>a-b);
-  const stableDays=historicalSlots.filter(n=>n>=20000).length;
+  const stableDays=historicalSlots.filter(n=>n>=LONG_TERM_SLOT_MIN).length;
   const lowerQuartile=historicalSlots[Math.floor(historicalSlots.length*.25)] ?? null;
   const currentFee=fleaFee(item.basePrice,item.price,data.flea,options.intelligence||0,options.management||0,stackCount);
   const currentSlot=currentFee===null?0:(item.price*stackCount-currentFee)/(item.width*item.height);
-  const long=historicalSlots.length>=24 && stableDays/historicalSlots.length>=.8 && lowerQuartile>=20000 && currentSlot>=20000 &&
+  const long=historicalSlots.length>=24 && stableDays/historicalSlots.length>=.8 && lowerQuartile>=LONG_TERM_SLOT_MIN && currentSlot>=LONG_TERM_SLOT_MIN &&
     ['可参考','报价延迟'].includes(quoteStatus(item,data,{...options,allowDelayed:true},now)) && !item.excluded;
   return { short, long, baseline: base, premium, reference7,change7,extraNet,priorDay, change24:priorDay?item.price/priorDay-1:null, days: days.size, confirmations: recent.length,
     reason: days.size < 6 || referenceRows.length<2 ? '7日历史覆盖不足' : !independent ? '尚无两个间隔15分钟的近期高价快照' : short ? '比约7日前涨价至少20%，税后增收已确认' : '未满足7日急涨条件',
     longDays:historicalSlots.length, lowerQuartile, longMedian:median(historicalSlots),
-    longReason: long ? '30日价格按现行费率回算：至少24日有效，至少80%日期每格净值达到2万。不是历史实际成交利润。' : `30日高值观察 ${historicalSlots.length}/30 天；当前尚未满足稳定高值条件。`,
+    longReason: long ? '30日价格按现行费率回算：至少24日有效，至少80%日期每格净值达到3万。不是历史实际成交利润。' : `30日高值观察 ${historicalSlots.length}/30 天；当前尚未满足每格3万的稳定高值条件。`,
     points: clean.filter(p => p.timestamp >= now - 30 * day).slice(-600) };
 }
 export function scenario(row,data,options={},price=row.item.price) {
@@ -361,6 +395,7 @@ export function profitStability(records,row,data,options={},now=Date.now()) {
   const matching=(records||[]).filter(d=>d.date>=cutoff&&d.date<today).map(d=>d.rows?.[row.id]).filter(r=>r?.version===expected && r.count>=4);
   const values=matching.map(r=>r.min).sort((a,b)=>a-b);
   const lower=values[Math.floor(values.length*.25)]??null;
-  const long=options.materialMode!=='owned' && matching.length>=24 && values.filter(v=>v>0).length/values.length>=.8 && lower>10000;
-  return {long,days:matching.length,lower,reason:long?'至少24日配对成本记录支持稳定收益':`配对收益档案 ${matching.length}/30 天（每日至少4次）`};
+  const compatible=(options.historyFullProgress??hasFullProgress(options,data)) && (options.intelligence||0)===3 && (options.management||0)===0 && !options.edition;
+  const long=compatible && options.materialMode!=='owned' && matching.length>=24 && values.filter(v=>v>0).length/values.length>=.8 && lower>10000;
+  return {long,days:matching.length,lower,reason:long?'至少24日配对成本记录支持稳定收益':!compatible?'当前角色条件与历史收益档案不同，暂不判定长线':`配对收益档案 ${matching.length}/30 天（每日至少4次）`};
 }

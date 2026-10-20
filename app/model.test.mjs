@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, hasFullProgress, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -231,6 +231,35 @@ test('long-term value needs 24 complete valid days and cannot be created from on
   assert.equal(analyzeHistory(points,i,data,{},now).long,true);
   assert.equal(analyzeHistory(points.slice(0,23),i,data,{},now).long,false);
   assert.equal(analyzeHistory(points.map(p=>({...p,offerCount:1})),i,data,{},now).long,false);
+});
+
+test('long-term slot value requires 30000 after fees, including the current quote',()=>{
+  const start=Math.floor(now/86400000)*86400000;
+  const history=price=>Array.from({length:26},(_,n)=>({priceMin:price,timestamp:start-(n+1)*86400000+3600000,offerCount:10}));
+  const i=item('boundary',{price:30000,average:30000,basePrice:30000});
+  const data=dataset([i],{flea:{...flea,sellOfferFeeRate:0,sellRequirementFeeRate:0}});
+  assert.equal(analyzeHistory(history(30000),i,data,{},now).long,true);
+  assert.equal(analyzeHistory(history(29999),i,data,{},now).long,false);
+  assert.equal(analyzeHistory(history(30000),{...i,price:29999},data,{},now).long,false);
+  assert.equal(analyzeHistory(history(30000),i,dataset([i]),{},now).long,false);
+});
+
+test('full defaults become editable facility, trader and task selections that persist after changes',()=>{
+  const task='000000000000000000000001',station='000000000000000000000002',trader='000000000000000000000003';
+  const i=item('out'),mat=item('material',{buy:[{trader,priceRUB:20000,currency:'RUB',minTraderLevel:4,taskUnlock:task}]});
+  const data=dataset([i,mat],{tasks:{[task]:{id:task,name:'任务'}},traders:{[trader]:{id:trader,levels:[{level:1},{level:4}]}},stations:{[station]:{id:station,name:'情报中心',slug:'intelligence-center',maxLevel:3},warehouse:{id:'warehouse',name:'仓库',maxLevel:4}},crafts:[{id:'r',station,level:3,taskUnlock:task,duration:3600,productItem:{item:i.id,count:2},requiredItems:[{item:mat.id,count:1}]}]});
+  const p=resolvePlayerProfile({},data);
+  assert.equal(p.maxProgress,false);assert.equal(p.progressConfigured,true);assert.equal(p.stationLevels.warehouse,4);
+  assert.equal(p.stationLevels[station],3);assert.equal(p.intelligence,3);assert.equal(p.traderLevels[trader],4);assert.deepEqual(p.completedTasks,[task]);assert.equal(hasFullProgress(p,data),true);
+  assert.equal(procurement(mat,data,p,now).cost,20000);
+  const edited=resolvePlayerProfile({...p,stationLevels:{...p.stationLevels,[station]:2},completedTasks:[],management:20},data);
+  assert.equal(edited.intelligence,2);assert.equal(edited.management,20);assert.deepEqual(edited.completedTasks,[]);assert.equal(hasFullProgress(edited,data),false);
+  assert.equal(procurement(mat,data,edited,now).cost,100000);
+  const reloaded=resolvePlayerProfile(JSON.parse(JSON.stringify(edited)),data);
+  assert.deepEqual(reloaded,edited);
+  assert.equal(collectCrafts(data,{...edited,onlyExecutable:true},now).length,0);
+  assert.equal(resolvePlayerProfile(edited,data,true).stationLevels[station],3);
+  assert.equal(resolvePlayerProfile({...edited,playerLevel:1},data,true).playerLevel,79);
 });
 
 test('sale scenarios recompute nonlinear fees and honor flea restrictions',()=>{

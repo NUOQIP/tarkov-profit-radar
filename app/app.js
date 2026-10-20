@@ -1,4 +1,4 @@
-import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,isScavengingItem,profitStability,scenario } from '/engine.js';
+import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolvePlayerProfile,stationMaxLevel,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,profitStability,scenario } from '/engine.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
 const UI_REVISION=6;
@@ -33,7 +33,7 @@ function safeView(v={}){
   if(!v||typeof v!=='object')v={};
   const c=v.criteria||{},n=x=>Number.isFinite(Number(x))?Math.max(0,Math.min(1e10,Number(x))):0;
   return {category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',filter:['short','long','favorites'].includes(v.filter)?v.filter:'all',
-    stack:v.stack==='full'?'full':'single',search:typeof v.search==='string'?v.search.slice(0,200):'',
+    search:typeof v.search==='string'?v.search.slice(0,200):'',
     flipType:['buy','barter'].includes(v.flipType)?v.flipType:'all',includeEvents:v.includeEvents===true,
     lootScope:v.lootScope==='scavenging'?'scavenging':'all',station:typeof v.station==='string'?v.station:'all',
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
@@ -56,13 +56,14 @@ const state={
 for(const market of Object.keys(MARKETS)){
   state.favorites[market]=safeIds(saved.favorites?.[market]);
   if(saved.uiRevision!==UI_REVISION)state.workspaceViews[market].loot.lootScope='all';
-  for(const v of Object.values(state.workspaceViews[market]))Object.assign(v,{includeEvents:state.views[market].includeEvents,stack:state.views[market].stack});
+  for(const v of Object.values(state.workspaceViews[market]))Object.assign(v,{includeEvents:state.views[market].includeEvents});
 }
 function view(){return state.workspaceViews[state.market][state.page==='items'?'loot':state.page];}
 function allViews(){return [state.views[state.market],...Object.values(state.workspaceViews[state.market])];}
 function catalogView(){return state.catalogViews[state.market];}
 function criteria(){return view().criteria||{};}
-function options(){return {...state.profiles[state.market],stack:view().stack,onlyExecutable:criteria().onlyExecutable===true,includeEvents:view().includeEvents===true,allowDelayedTrades:true};}
+let profileComplete=false,animateNext=true,enterTimer;
+function options(){return {...state.profiles[state.market],stack:'single',historyFullProgress:profileComplete,onlyExecutable:criteria().onlyExecutable===true,includeEvents:view().includeEvents===true,allowDelayedTrades:true};}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{toast('设备存储不可用，这次设置仅保留到页面关闭。');}}
 let data=null,rows={loot:[],flips:[],crafts:[]},visible={loot:[],flips:[],crafts:[]},limit={loot:40,flips:30,crafts:30},sequence=0,busy=false,lastInteraction=0;
 let historyBook={},ledger=[],signalCache=new Map(),pendingSnapshot=null,pendingSignals=null,detailRow=null,chartDays=7,toastTimer,applyTimer;
@@ -80,8 +81,8 @@ async function api(path,market=state.market){
 function syncControls(){
   const v=view();if(!CATEGORIES[v.category]&&v.category!=='all')v.category='all';
   if(!['all','short','long','favorites'].includes(v.filter))v.filter='all';
-  $('#search').value=v.search||'';$('#stack').value=v.stack==='full'?'full':'single';$('#flip-type').value=v.flipType||'all';$('#include-events').checked=v.includeEvents===true;
-  const cv=catalogView();$('#catalog-search').value=cv.search;$('#catalog-category').value=cv.category;$('#catalog-availability').value=cv.availability;$('#catalog-stack').value=v.stack;$('#catalog-events').checked=v.includeEvents;
+  $('#search').value=v.search||'';$('#flip-type').value=v.flipType||'all';$('#include-events').checked=v.includeEvents===true;
+  const cv=catalogView();$('#catalog-search').value=cv.search;$('#catalog-category').value=cv.category;$('#catalog-availability').value=cv.availability;$('#catalog-events').checked=v.includeEvents;
   $('#catalog-favorites').setAttribute('aria-pressed',String(cv.favoritesOnly));
   $$('button[data-page]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.page===state.page)));
   $('#monitor-toolbar').hidden=state.page==='items';$('#monitor-panel').hidden=state.page==='items';
@@ -91,7 +92,10 @@ function syncControls(){
   document.documentElement.dataset.theme=state.theme;$('#theme').innerHTML=icon(state.theme==='light'?'moon':'sun');
 }
 function rebuild(){
-  if(!data)return;signalCache.clear();rows={loot:collectLoot(data,options()),flips:collectFlips(data,options()),crafts:collectCrafts(data,options())};
+  if(!data)return;
+  if(!state.profiles[state.market].progressConfigured){state.profiles[state.market]=resolvePlayerProfile(state.profiles[state.market],data);persist();}
+  profileComplete=hasFullProgress(state.profiles[state.market],data);$('#profile-summary').textContent=profileComplete?'满进度':'自定义条件';
+  signalCache.clear();rows={loot:collectLoot(data,options()),flips:collectFlips(data,options()),crafts:collectCrafts(data,options())};
   catalogRows=collectCatalog(data,options());catalogById=new Map(catalogRows.map(r=>[r.id,r]));routeIndex=new Map();
   for(const r of [...rows.flips,...rows.crafts])for(const id of new Set([r.item.id,...(r.recipe||[]).map(m=>m.item.id)])){
     if(!routeIndex.has(id))routeIndex.set(id,[]);routeIndex.get(id).push(r);
@@ -101,7 +105,7 @@ function switchPage(page){
   if(!PAGES.includes(page)||state.page===page)return;
   if(state.page!=='items')for(const k of Object.keys(MODULES))screenScroll[state.page][k]=$('#'+k).scrollTop;
   else screenScroll.items=$('#catalog-scroll').scrollTop;
-  state.page=page;syncControls();rebuild();render(true);
+  state.page=page;animateNext=true;syncControls();rebuild();render(true);
   if(page!=='items')for(const k of Object.keys(MODULES))$('#'+k).scrollTop=screenScroll[page][k];
   else $('#catalog-scroll').scrollTop=screenScroll.items;
   history.replaceState(null,'',`?market=${state.market}&view=${page}`);persist();
@@ -109,14 +113,16 @@ function switchPage(page){
 function syncWorkspace(){
   const page=state.page;
   document.body.dataset.page=page;
-  $('#context-toolbar').hidden=!['loot','crafts'].includes(page);
-  $('#loot-scopes').hidden=page!=='loot';
-  $('#station-filter-label').hidden=page!=='crafts';
+  const titles={loot:['01','捡什么 · 卖什么','单格净值 ↓'],flips:['02','商人倒货','单次净利 ↓'],crafts:['03','藏身处制作','每批净利 ↓'],items:['04','物品一览','单格净值 ↓']};
+  $('#page-number').textContent=titles[page][0];$('#page-title').textContent=titles[page][1];$('#sort-indicator').textContent=titles[page][2];
+  $$('[data-page-count]').forEach(el=>el.hidden=el.dataset.pageCount!==page);
+  $('#context-toolbar').hidden=page==='items';$('#catalog-context').hidden=page!=='items';
+  $('#loot-scopes').hidden=page!=='loot';$('#station-filter-label').hidden=page!=='crafts';$('#flip-filter-label').hidden=page!=='flips';
   $$('[data-module]').forEach(el=>el.hidden=el.dataset.module!==page);
   $$('[data-loot-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lootScope===view().lootScope)));
 }
 function resetCurrentFilters(){
-  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents,stack:v.stack}));
+  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents}));
   syncControls();rebuild();render();persist();
 }
 
@@ -159,7 +165,7 @@ function renderCatalog(preserve=false){
   $('#catalog-range').textContent=filtered.length?`${fmt(start+1)}–${fmt(Math.min(start+catalogPageSize,filtered.length))} / ${fmt(filtered.length)} 项 · 卢布 ₽`:'0 项';
   $('#catalog-page').textContent=`${catalogPage} / ${pages}`;$('#catalog-prev').disabled=catalogPage<=1;$('#catalog-next').disabled=catalogPage>=pages;
   $('#catalog-favorites').setAttribute('aria-pressed',String(f.favoritesOnly));
-  $$('.catalog-basis').forEach(el=>el.textContent=view().stack==='full'?'满堆叠合计':'单件 / 单发');
+  $('#catalog-summary').textContent=(CATEGORIES[f.category]||'全部分类')+' · 单格净值倒序';
   scroller.scrollTop=scroll;
   const target=oldId?$('#catalog-body').querySelector(`[data-catalog-id="${oldId}"]`):null;
   if(target)scroller.scrollTop+=target.getBoundingClientRect().top-scroller.getBoundingClientRect().top-offset;
@@ -188,7 +194,7 @@ function card(r,index){
   const label=loot?(r.fleaNet===null?'商人净值 / 格':'净到手 / 格'):craft?'净利 / 批':'净利 / 次';
   const value=loot?fmt(r.slotValue):sign(r.profit);
   const actor=craft?r.station:r.trader;
-  const route=loot?'':`<div class="route">${image(actor?.image)}<span>${esc(actor?.name||'未知')} ${craft?'Lv.':'LL'}${r.level} · ${craft?'制作':r.recipe?'兑换':'直购'}</span><span>${craft?duration(r.seconds)+' · ×'+r.count:'限购 '+(r.limit??'未知')}</span></div>`;
+  const route=loot?'':`<div class="route">${image(actor?.image)}<span>${esc(actor?.name||'未知')} ${craft?'Lv.':'LL'}${r.level} · ${craft?'制作':r.recipe?'兑换':'直购'}${r.execution?.missing.some(x=>/Lv\.|LL|任务|等级|版本/.test(x))?' <b class="condition-tag">未解锁</b>':''}</span><span>${craft?duration(r.seconds)+' · ×'+r.count:'限购 '+(r.limit??'未知')}</span></div>`;
   const ingredients=r.recipe?`<div class="ingredients">${r.recipe.slice(0,6).map(m=>`<span class="ingredient" title="${esc(m.item.name)} · ${m.tool?'可复用工具':esc(m.source)}">${image(m.item.image)}<span>${esc(m.item.shortName)} <i>×${m.count}</i>${m.tool?' ⌁':''}</span></span>`).join('')}${r.recipe.length>6?`<span class="ingredient">+${r.recipe.length-6} 项</span>`:''}</div>`:'';
   const metrics=metric('最低价',fmt(i.price))+metric('24h均价',fmt(i.average))+
     (loot?metric(`${esc(r.channel)}净到手`,fmt(r.net)):metric(options().materialMode==='owned'?'材料可卖净值':craft?'材料成本':'进货成本',fmt(r.purchase)));
@@ -198,7 +204,7 @@ function card(r,index){
 
   const quoteAt=r.quoteAt||i.scan;
   const quote=r.status==='可参考'?ago(quoteAt):r.status+(quoteAt?' · '+ago(quoteAt):'');
-  return `<article class="card ${s.short?'short':s.long?'long':''}" data-row="${esc(r.id)}">
+  return `<article style="--order:${Math.min(index,7)}" class="card ${s.short?'short':s.long?'long':''}" data-row="${esc(r.id)}">
   <div class="card-main" role="button" tabindex="0" data-open="${esc(r.id)}" aria-label="查看${esc(i.name)}明细">
     <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${tags(r,s)||esc(CATEGORIES[i.category])}</div></div><div class="money"><strong class="${loot?'':'positive'}">${value}</strong><span class="unit">${label}</span></div></div>
     ${route}${ingredients}<div class="metrics">${metrics}</div><div class="card-extra">${extra}</div></div>
@@ -226,11 +232,24 @@ function render(preserve=false){
     else $('#'+key).scrollTop=0;
   }
   $$('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===view().filter)));
-  $('#favorite-count').textContent=state.favorites[state.market].length||'';$('#filter-active').hidden=!Object.values(criteria()).some(Boolean);
+  $('#favorite-count').textContent=state.favorites[state.market].length||'';renderFilterSummary();
   $('#coverage').textContent=`${MARKETS[state.market]} · ${fmt(data.rawCount)} 物品 · 每5分钟刷新`;
   $('#history-status').textContent=signalsLoading?'核对历史…':`历史 ${signalsInfo.checked} / ${signalsInfo.total||'—'}`;
   renderCatalog(preserve);
+  if(animateNext){const el=state.page==='items'?$('#catalog-panel'):$('#'+state.page);el.classList.add('is-entering');clearTimeout(enterTimer);enterTimer=setTimeout(()=>$$('.is-entering').forEach(e=>e.classList.remove('is-entering')),650);animateNext=false;}
 }
+function renderFilterSummary(){
+  const v=state.page==='items'?catalogView():view(),chips=[];
+  if(v.category!=='all')chips.push(['category',CATEGORIES[v.category]]);
+  if(view().includeEvents)chips.push(['events','含活动品']);
+  if(state.page==='items'){if(v.availability!=='all')chips.push(['availability',{flea:'跳蚤可估值',banned:'跳蚤禁售',unpriced:'暂无售价'}[v.availability]]);}
+  else for(const [key,label] of [['minSlot','单格 ≥'],['minProfit','净利 ≥'],['budget','预算 ≤'],['maxHours','工时 ≤'],['onlyExecutable','条件已满足'],['freshOnly','1小时内报价']]){
+    const n=criteria()[key];if(n)chips.push([key,typeof n==='boolean'?label:label+' '+fmt(n)+(key==='maxHours'?'h':'')]);
+  }
+  $('#filter-active').hidden=!chips.length;$('#filter-active').textContent=chips.length;
+  $('#active-filters').hidden=!chips.length;$('#active-filters').innerHTML=chips.map(([key,label])=>`<button data-clear-filter="${key}" aria-label="移除${esc(label)}筛选">${esc(label)}${icon('x')}</button>`).join('');
+}
+
 function reading(){return state.paused||$('dialog[open]')||Date.now()-lastInteraction<1500;}
 function updateStatus(){if(data)$('#status').textContent='获取 '+new Date(data.fetchedAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});}
 function warning(message){$('#warning').hidden=!message;$('#warning').textContent=message||'';$('#connection-dot').classList.toggle('offline',Boolean(message));}
@@ -331,7 +350,7 @@ function detailMarkup(r){
   <section class="detail-section"><h3>价格走势<div class="chart-controls"><button data-days="7" class="${chartDays===7?'active':''}">7日</button><button data-days="30" class="${chartDays===30?'active':''}">30日</button></div></h3><div id="history-content"></div></section>
   <section class="detail-section"><h3>卖价试算</h3>${i.types.includes('noFlea')||!data.flea.enabled?'<p>当前市场禁止该物品上跳蚤。</p>':`<div class="price-reference"><button data-price="${i.price||''}">最低价 ₽${fmt(i.price)}</button><button data-price="${i.average||''}">24h均价 ₽${fmt(i.average)}</button></div>${loot?`<label class="quantity-control">出售数量<input id="sale-quantity" type="number" min="1" max="100000" step="1" value="${r.count}"></label>`:''}<div class="scenario-controls"><span>目标单价 ₽</span><input id="target-price" type="number" min="1" step="100" value="${i.price>0?i.price:''}" placeholder="输入期望挂价" aria-label="目标挂牌单价"></div><div id="scenario-results" class="scenario-grid"></div>`}</section>
   ${relatedRoutes(r)}
-  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">默认满进度 · 条件满足</span>'}</div>${r.task&&!options().maxProgress?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}${(r.recipe||[]).filter(m=>m.tool).map(m=>`<label class="tool-line"><input type="checkbox" data-owned-tool="${m.item.id}" ${options().ownedTools.includes(m.item.id)?'checked':''}>我已持有 ${esc(m.item.name)}</label>`).join('')}<p>本轮剩余库存需在游戏内确认；收藏不会代表实际仓库持有。</p></section>`:''}
+  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">当前条件满足</span>'}</div>${r.task&&!options().maxProgress?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}${(r.recipe||[]).filter(m=>m.tool).map(m=>`<label class="tool-line"><input type="checkbox" data-owned-tool="${m.item.id}" ${options().ownedTools.includes(m.item.id)?'checked':''}>我已持有 ${esc(m.item.name)}</label>`).join('')}<p>本轮剩余库存需在游戏内确认；收藏不会代表实际仓库持有。</p></section>`:''}
   <section class="detail-section"><h3>收益拆解</h3>${dl(costRows)}<p style="margin-top:12px">${r.status==='报价延迟'?'含1至6小时的延迟报价，仅供估算；不进入短线或“仅看可执行”。':r.status!=='可参考'?(r.traderNet===null?'暂无符合当前条件的有效售价。':'跳蚤报价不满足当前条件，列表采用商人底价。'):''} ${esc(stateNote(i))}。报价为市场扫描结果，不保证实际成交。</p><a class="source-link" href="https://tarkov.dev/item/${encodeURIComponent(i.slug)}?gameMode=${state.market}" target="_blank" rel="noreferrer">核对上游物品资料 ↗</a></section>`;
 }
 async function openDetail(id,remember=true){
@@ -342,21 +361,57 @@ async function openDetail(id,remember=true){
   if(r.item.currencyOnly)return;
   try{await getHistory(r.item,market);if(request===detailSequence&&market===state.market)historyDetail();}catch(error){if(request===detailSequence&&$('#history-content'))$('#history-content').innerHTML=`<p>${/404/.test(error.message)?'上游暂未提供该物品的价格历史。':'历史暂不可用：'+esc(error.message)}</p>`;}
 }
-function showSettings(){
-  const p=options();$('#profile-market').textContent=MARKETS[state.market];
-  for(const [id,key] of [['management','management'],['material-mode','materialMode'],['edition','edition']])$('#'+id).value=p[key]??'';
-  $('#settings').showModal();
+function closePanel(dialog,value='cancel'){
+  if(!dialog.open||dialog.classList.contains('is-closing'))return;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){dialog.close(value);return;}
+  dialog.classList.add('is-closing');setTimeout(()=>{dialog.close(value);dialog.classList.remove('is-closing');},170);
 }
-
+function settingsTab(key){
+  $$('[data-settings-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.settingsTab===key)));
+  $$('[data-settings-panel]').forEach(p=>p.hidden=p.dataset.settingsPanel!==key);$('.settings-scroll').scrollTop=0;
+}
+function taskSelectionSummary(){
+  const all=$$('[data-task]'),count=all.filter(e=>e.checked).length;
+  $('#tasks-all').checked=all.length>0&&count===all.length;$('#tasks-all').indeterminate=count>0&&count<all.length;$('#task-count').textContent=`${count} / ${all.length}`;
+}
+function renderProfileInputs(p){
+  for(const [id,key] of [['player-level','playerLevel'],['management','management'],['material-mode','materialMode'],['edition','edition']])$('#'+id).value=p[key]??'';
+  $('#progress-description').textContent=hasFullProgress(p,data)?'满设施 · 满商人 · 全任务完成':'按你的角色进度计算';
+  const selectLevels=(current,max,prefix)=>Array.from({length:max+1},(_,n)=>`<option value="${n}" ${current===n?'selected':''}>${n?prefix+' '+n:'未解锁'}</option>`).join('');
+  $('#station-settings').innerHTML=Object.values(data.stations).map(st=>`<label class="station-setting"><span>${image(st.image)}<span>${esc(st.name)}<small>最高 ${stationMaxLevel(st,data)} 级</small></span></span><select data-station="${st.id}" aria-label="${esc(st.name)}等级">${selectLevels(p.stationLevels[st.id]||0,stationMaxLevel(st,data),'Lv.')}</select></label>`).join('');
+  $('#trader-settings').innerHTML=Object.values(data.traders).map(t=>`<label><span>${image(t.image)}${esc(t.name)}</span><select data-trader="${t.id}" aria-label="${esc(t.name)}忠诚度">${selectLevels(p.traderLevels[t.id]||0,traderMaxLevel(t),'LL')}</select></label>`).join('');
+  $('#task-settings').innerHTML=profileTaskIds(data).sort((a,b)=>(data.tasks?.[a]?.name||a).localeCompare(data.tasks?.[b]?.name||b,'zh-CN')).map(id=>`<label data-task-label><input type="checkbox" data-task="${id}" ${p.completedTasks.includes(id)?'checked':''}><span>${esc(data.tasks?.[id]?.name||id)}</span></label>`).join('');
+  $('#task-search').value='';$('#tasks-empty').hidden=true;taskSelectionSummary();
+}
+function profileFromForm(){
+  return resolvePlayerProfile({...state.profiles[state.market],maxProgress:false,progressConfigured:true,
+    playerLevel:$('#player-level').value,management:$('#management').value,materialMode:$('#material-mode').value,edition:$('#edition').value,
+    traderLevels:Object.fromEntries($$('[data-trader]').map(e=>[e.dataset.trader,Number(e.value)])),
+    stationLevels:Object.fromEntries($$('[data-station]').map(e=>[e.dataset.station,Number(e.value)])),
+    completedTasks:$$('[data-task]').filter(e=>e.checked).map(e=>e.dataset.task)},data);
+}
+function showSettings(){
+  if(!data){toast('行情加载后即可配置角色条件。');return;}
+  $('#profile-market').textContent=MARKETS[state.market];renderProfileInputs(state.profiles[state.market]);settingsTab('player');$('#settings').showModal();
+}
 function showInfo(title,html){$('#info-title').textContent=title;$('#info-content').innerHTML=html;$('#info-dialog').showModal();}
-function methodology(){showInfo('计算口径与数据状态',`<h3>行情与收益</h3><p>每5分钟检查更新，逐项显示上游报价时间。单格净值扣除上架费；直购、兑换和制作扣除材料成本。默认满级商人与设施、任务全完成；情报中心3级，管理技能按设置。制作不计燃料运行成本，按每批最终净利排序。工具首次购置单列，不重复计入每批成本。</p><h3>红色与绿色</h3><p>红底表示7日急涨：当前最低报价比约7日前的参照价至少高20%，税后增收至少10%。需覆盖至少6日历史，参照区间至少2次有效报价，近4小时有2次间隔至少15分钟的高价确认，且当前报价在1小时内。无需最近24小时继续上涨；没有证据不标红。7日参照取距今6至8日前的有效报价中位数。</p><p>捡卖长线依据至少24日的历史报价按现行费率回算，每格2万以上的日期至少占80%。倒货、制作的绿色标签依赖本应用逐步积累的配对成本档案，不把价格史冒充利润史。</p><h3>跑刀杂物</h3><p>只包含交换品、饮食和情报。这里按物品类型划分，不代表地图刷新概率；稀有钥匙、整枪与护甲可在“全部物品”或物品一览查阅。</p><h3>活动物品与数据完整度</h3><p>活动品保留在数据库。顶部开关控制是否展示已识别的活动限定物品；规则清单仍需随版本维护，不能保证识别全部新活动。报价缺少实际耐久、容量和钥匙余次，需要在游戏中核对。</p><h3>本次核验</h3><p>${data?`市场：${MARKETS[state.market]}<br>快照：${clock(data.fetchedAt)}<br>历史候选：${signalsInfo.checked} / ${signalsInfo.total}<br>收益留档：${ledger.length} 天`:'数据加载中'}</p><h3>刷新保护</h3><p>滚动、打开明细或暂停时，新行情先保留。应用更新时同时重算数值与排序，尽量保持正在看的条目位置。</p>`);}
+function methodology(){showInfo('计算口径与数据状态',`<h3>行情与收益</h3><p>每5分钟检查更新，逐项显示上游报价时间。单格净值扣除上架费；直购、兑换和制作扣除材料成本。首次默认满级商人与设施、任务全完成，可在「我的条件」修改等级、技能和任务；税费按当前情报中心与管理技能计算。制作不计燃料运行成本，按每批最终净利排序。工具首次购置单列，不重复计入每批成本。</p><h3>红色与绿色</h3><p>红底表示7日急涨：当前最低报价比约7日前的参照价至少高20%，税后增收至少10%。需覆盖至少6日历史，参照区间至少2次有效报价，近4小时有2次间隔至少15分钟的高价确认，且当前报价在1小时内。无需最近24小时继续上涨；没有证据不标红。7日参照取距今6至8日前的有效报价中位数。</p><p>捡卖长线依据至少24日的历史报价按现行费率回算，每格3万以上的日期至少占80%。倒货、制作的绿色标签依赖本应用逐步积累的配对成本档案，不把价格史冒充利润史。</p><h3>跑刀杂物</h3><p>只包含交换品、饮食和情报。这里按物品类型划分，不代表地图刷新概率；稀有钥匙、整枪与护甲可在“全部物品”或物品一览查阅。</p><h3>活动物品与数据完整度</h3><p>活动品保留在数据库。筛选抽屉内的开关控制是否展示已识别的活动限定物品；规则清单仍需随版本维护，不能保证识别全部新活动。报价缺少实际耐久、容量和钥匙余次，需要在游戏中核对。</p><h3>本次核验</h3><p>${data?`市场：${MARKETS[state.market]}<br>快照：${clock(data.fetchedAt)}<br>历史候选：${signalsInfo.checked} / ${signalsInfo.total}<br>收益留档：${ledger.length} 天`:'数据加载中'}</p><h3>刷新保护</h3><p>滚动、打开明细或暂停时，新行情先保留。应用更新时同时重算数值与排序，尽量保持正在看的条目位置。</p>`);}
 function toggleFavorite(id){const list=state.favorites[state.market],index=list.indexOf(id);if(index<0)list.push(id);else list.splice(index,1);persist();render(true);if(detailRow?.item.id===id){const button=$('#detail-content [data-favorite]');if(button)button.innerHTML=icon('star')+(index<0?'已收藏':'收藏');}toast(index<0?'已收藏；收藏页仍按价值排序。':'已取消收藏');}
-function showFilters(){const c=criteria();for(const [id,key] of [['min-slot','minSlot'],['min-profit','minProfit'],['budget','budget'],['max-hours','maxHours']])$('#'+id).value=c[key]||'';$('#only-executable').checked=c.onlyExecutable||false;$('#fresh-only').checked=c.freshOnly||false;$('#filters').showModal();}
+function showFilters(){
+  const c=criteria(),catalog=state.page==='items';
+  $('#normal-filter-fields').hidden=catalog;$('#catalog-filter-fields').hidden=!catalog;
+  for(const [id,key] of [['min-slot','minSlot'],['min-profit','minProfit'],['budget','budget'],['max-hours','maxHours']])$('#'+id).value=c[key]||'';
+  $('#only-executable').checked=c.onlyExecutable||false;$('#fresh-only').checked=c.freshOnly||false;
+  $('#category').value=view().category;$('#include-events').checked=view().includeEvents;
+  $('#catalog-category').value=catalogView().category;$('#catalog-availability').value=catalogView().availability;$('#catalog-events').checked=view().includeEvents;
+  $$('[data-filter-for]').forEach(el=>el.hidden=el.dataset.filterFor==='trades'?!['flips','crafts'].includes(state.page):el.dataset.filterFor!==state.page);
+  $('#filters').showModal();
+}
 function exportSettings(){const blob=new Blob([JSON.stringify({version:3,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function importSettings(file){
   try{if(!file||file.size>512000)throw new Error('请选择小于500KB的设置文件');const p=JSON.parse(await file.text());if(![2,3].includes(p.version)||!p.profiles)throw new Error('不是本应用的设置备份');
     for(const m of Object.keys(MARKETS)){state.profiles[m]=normalizeProfile(p.profiles[m]);state.favorites[m]=safeIds(p.favorites?.[m]);state.workspaceViews[m]=Object.fromEntries(['loot','flips','crafts'].map(k=>[k,safeView(p.workspaceViews?.[m]?.[k])]));state.views[m]=safeView(p.views?.[m]);state.catalogViews[m]=safeCatalogView(p.catalogViews?.[m]);}
-    for(const m of Object.keys(MARKETS)){if(p.uiRevision!==UI_REVISION)state.workspaceViews[m].loot.lootScope='all';for(const v of Object.values(state.workspaceViews[m]))Object.assign(v,{includeEvents:state.views[m].includeEvents,stack:state.views[m].stack});}
+    for(const m of Object.keys(MARKETS)){if(p.uiRevision!==UI_REVISION)state.workspaceViews[m].loot.lootScope='all';for(const v of Object.values(state.workspaceViews[m]))Object.assign(v,{includeEvents:state.views[m].includeEvents});}
     if(['light','dark'].includes(p.theme))state.theme=p.theme;
     persist();syncControls();rebuild();render(true);$('#settings').close('cancel');toast('已导入角色条件、显示偏好与收藏。');
   }catch(error){toast('导入失败：'+error.message);}
@@ -369,15 +424,17 @@ document.addEventListener('click',event=>{
   if(target.id==='detail-back'&&detailTrail.length)openDetail(detailTrail.pop(),false);
   if(target.dataset.favorite)toggleFavorite(target.dataset.favorite);
 
-  if(target.dataset.close)$('#'+target.dataset.close).close();
+  if(target.dataset.close)closePanel($('#'+target.dataset.close));
+  if(target.dataset.settingsTab)settingsTab(target.dataset.settingsTab);
+  if(target.dataset.clearFilter){const key=target.dataset.clearFilter,v=state.page==='items'?catalogView():view();if(key==='events')allViews().forEach(x=>x.includeEvents=false);else if(['category','availability'].includes(key))v[key]='all';else view().criteria[key]=0;catalogPage=1;syncControls();rebuild();render();persist();}
   if(target.dataset.more){limit[target.dataset.more]+=40;render(true);}
   if(target.hasAttribute('data-reset')||target.id==='reset-visible-filters')resetCurrentFilters();
   if(target.hasAttribute('data-retry'))refresh(true);
   if(target.dataset.days){chartDays=Number(target.dataset.days);$$('[data-days]').forEach(b=>b.classList.toggle('active',Number(b.dataset.days)===chartDays));historyDetail();}
-  if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;render();persist();}
+  if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;animateNext=true;render();persist();}
   if(target.hasAttribute('data-price')&&Number(target.dataset.price)>0){$('#target-price').value=target.dataset.price;updateScenario();}
-  if(target.dataset.filter){view().filter=target.dataset.filter;render();persist();}
-  if(target.id==='catalog-reset'||target.hasAttribute('data-catalog-reset')){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();renderCatalog();persist();}
+  if(target.dataset.filter){view().filter=target.dataset.filter;animateNext=true;render();persist();}
+  if(target.id==='catalog-reset'||target.hasAttribute('data-catalog-reset')){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();renderCatalog();renderFilterSummary();persist();}
   if(target.dataset.market&&target.dataset.market!==state.market){
     state.market=target.dataset.market;sequence++;detailSequence++;data=null;detailRow=null;detailTrail=[];historyBook={};ledger=[];signalCache.clear();pendingSnapshot=null;pendingSignals=null;
     catalogRows=[];catalogById=new Map();routeIndex=new Map();catalogPage=1;screenScroll.items=0;for(const p of ['loot','flips','crafts'])screenScroll[p]={loot:0,flips:0,crafts:0};
@@ -389,11 +446,8 @@ document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.tar
 for(const el of [$('.columns'),$('#catalog-scroll')])el.addEventListener('scroll',()=>{lastInteraction=Date.now();if(pendingSnapshot||pendingSignals)queueApply();},true);
 $('#detail-dialog').addEventListener('close',()=>{detailRow=null;detailTrail=[];detailSequence++;signalCache.clear();render(true);if(pendingSnapshot||pendingSignals)queueApply();});
 $('#search').addEventListener('input',e=>{view().search=e.target.value;render();persist();});
-for(const [id,key] of [['category','category'],['stack','stack'],['flip-type','flipType']])$('#'+id).addEventListener('change',e=>{view()[key]=e.target.value;if(key==='category'&&['weapon','mods','armor','ammo','keys','medical','gear','containers'].includes(e.target.value))view().lootScope='all';if(key==='stack'){allViews().forEach(v=>v.stack=e.target.value);rebuild();}render();persist();});
-for(const id of ['include-events','catalog-events'])$('#'+id).addEventListener('change',e=>{allViews().forEach(v=>v.includeEvents=e.target.checked);catalogPage=1;syncControls();rebuild();render();persist();});
+$('#flip-type').addEventListener('change',e=>{view().flipType=e.target.value;animateNext=true;render();persist();});
 $('#catalog-search').addEventListener('input',e=>{catalogView().search=e.target.value;catalogPage=1;renderCatalog();persist();});
-for(const [id,key] of [['catalog-category','category'],['catalog-availability','availability']])$('#'+id).addEventListener('change',e=>{catalogView()[key]=e.target.value;catalogPage=1;renderCatalog();persist();});
-$('#catalog-stack').addEventListener('change',e=>{allViews().forEach(v=>v.stack=e.target.value);catalogPage=1;syncControls();rebuild();render();persist();});
 $('#catalog-favorites').addEventListener('click',()=>{catalogView().favoritesOnly=!catalogView().favoritesOnly;catalogPage=1;renderCatalog();persist();});
 for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$('#'+id).addEventListener('click',()=>{catalogPage=Math.max(1,catalogPage+step);renderCatalog();$('#catalog-scroll').focus({preventScroll:true});});
 $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').addEventListener('click',applyPending);
@@ -403,14 +457,30 @@ $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenEl
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
 $('#method-button').addEventListener('click',methodology);$('#history-status').addEventListener('click',methodology);
 $('#profile-form').addEventListener('submit',e=>{
-  if(e.submitter?.value!=='save')return;
-  state.profiles[state.market]=normalizeProfile({...state.profiles[state.market],maxProgress:true,management:$('#management').value,materialMode:$('#material-mode').value,edition:$('#edition').value});
-  persist();rebuild();render(true);toast('计算设置已保存。');
+  e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#settings'));return;}
+  state.profiles[state.market]=profileFromForm();persist();rebuild();render(true);closePanel($('#settings'),'save');toast('已按你的条件重新计算');
 });
-
+$('#reset-progress').addEventListener('click',()=>renderProfileInputs(resolvePlayerProfile(profileFromForm(),data,true)));
+$('#stations-max').addEventListener('click',()=>$$('[data-station]').forEach(e=>e.value=stationMaxLevel(data.stations[e.dataset.station],data)));
+$('#traders-max').addEventListener('click',()=>$$('[data-trader]').forEach(e=>e.value=traderMaxLevel(data.traders[e.dataset.trader])));
+$('#tasks-all').addEventListener('change',e=>{$$('[data-task]').forEach(t=>t.checked=e.target.checked);taskSelectionSummary();});
+$('#task-settings').addEventListener('change',taskSelectionSummary);
+$('#task-search').addEventListener('input',e=>{const q=e.target.value.trim().toLocaleLowerCase();$$('[data-task-label]').forEach(l=>l.hidden=!l.textContent.toLocaleLowerCase().includes(q));$('#tasks-empty').hidden=$$('[data-task-label]').some(l=>!l.hidden);});
 $('#settings').addEventListener('close',()=>{if(pendingSnapshot||pendingSignals)queueApply();});
-$('#filter-form').addEventListener('submit',e=>{if(e.submitter?.value!=='save')return;view().criteria={minSlot:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};rebuild();render();persist();});
-$('#clear-filters').addEventListener('click',()=>{view().criteria={};$('#filters').close();rebuild();render();persist();});
+$('#filter-form').addEventListener('submit',e=>{
+  e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#filters'));return;}
+  const catalog=state.page==='items',events=$(catalog?'#catalog-events':'#include-events').checked;
+  allViews().forEach(v=>v.includeEvents=events);
+  if(catalog){catalogView().category=$('#catalog-category').value;catalogView().availability=$('#catalog-availability').value;catalogPage=1;}
+  else {view().category=$('#category').value;if(['weapon','mods','armor','ammo','keys','medical','gear','containers'].includes(view().category))view().lootScope='all';
+    view().criteria={minSlot:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};}
+  animateNext=true;syncControls();rebuild();render();persist();closePanel($('#filters'),'save');
+});
+$('#clear-filters').addEventListener('click',()=>{allViews().forEach(v=>v.includeEvents=false);if(state.page==='items'){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();rebuild();render();persist();}else resetCurrentFilters();closePanel($('#filters'));});
+$$('dialog').forEach(dialog=>{
+  dialog.addEventListener('cancel',e=>{e.preventDefault();closePanel(dialog);});
+  dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closePanel(dialog);});
+});
 $('#detail-content').addEventListener('input',e=>{if(['target-price','sale-quantity'].includes(e.target.id))updateScenario();});
 $('#detail-content').addEventListener('change',e=>{
   const key=e.target.dataset.taskComplete?'completedTasks':e.target.dataset.ownedTool?'ownedTools':null;if(!key)return;
