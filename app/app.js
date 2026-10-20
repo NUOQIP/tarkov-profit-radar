@@ -3,6 +3,8 @@ import { createUpdateWindow } from '/update-window.js';
 import { quicklookLayout,opportunityTone,QUICKLOOK_VALUE_STEPS,DEFAULT_QUICKLOOK_RANGE,EVERYDAY_QUICKLOOK_RANGE,normalizeQuicklookRange,quicklookRangeMatches } from '/quicklook.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
+const QUICKLOOK_PRESETS={everyday:{types:DEFAULT_SCAVENGING_CATEGORIES,range:EVERYDAY_QUICKLOOK_RANGE},keys:{types:['keys'],range:DEFAULT_QUICKLOOK_RANGE},mods:{types:['mods'],range:DEFAULT_QUICKLOOK_RANGE}};
+const matchesQuicklookPreset=(v,p)=>v.quicklookRange.every((n,i)=>n===p.range[i])&&v.quicklookTypes.length===p.types.length&&p.types.every(k=>v.quicklookTypes.includes(k));
 const UI_REVISION=6;
 const PAGES=['loot','flips','crafts','items'],MODULES={loot:'捡什么 · 卖什么',flips:'商人倒货',crafts:'藏身处制作'};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,6 +29,8 @@ const paths={
  copy:'<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',check:'<path d="m5 12 4 4L20 5"/>',box:'<path d="m12 3 9 5v10l-9 5-9-5V8Z M3 8l9 5 9-5M12 13v10"/>'
 };
 const solidIcons={
+ 'preset-keys':'<path fill-rule="evenodd" d="M8 3a7 7 0 1 0 6.3 10H18v3h3v-3h2V8h-8.7A7 7 0 0 0 8 3Zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>',
+ 'preset-mods':'<path d="M1 6h5v12H1Zm17-2h5v16h-5ZM7 8h10v8H7Zm3 8h4v5h-4Z"/>',
  refresh:'<path d="M4.2 7.5a9 9 0 0 1 14.16-1.86L20 4v7h-7l3.45-3.45a6.3 6.3 0 0 0-9.91 1.3ZM19.8 16.5a9 9 0 0 1-14.16 1.86L4 20v-7h7l-3.45 3.45a6.3 6.3 0 0 0 9.91-1.3Z"/>',
  'nav-loot':'<path fill-rule="evenodd" d="M8 2h8l2 5h1l2 3v12H3V10l2-3h1Zm2 3L9 7h6l-1-2Zm-3 9v2h10v-2Z"/>',
  'nav-flips':'<path d="m16 1 7 6-7 6V9H3V5h13ZM8 11v4h13v4H8v4l-7-6Z"/>',
@@ -167,8 +171,8 @@ function syncQuicklookRange(){
   $('#quicklook-range-value').textContent=rangeLabel(low)+' — '+rangeLabel(high);
   $('#quicklook-range-track').style.setProperty('--range-start',low/last*100+'%');
   $('#quicklook-range-track').style.setProperty('--range-end',high/last*100+'%');
-  $('#quicklook-everyday').setAttribute('aria-pressed',String(low===EVERYDAY_QUICKLOOK_RANGE[0]&&high===EVERYDAY_QUICKLOOK_RANGE[1]));
-  $('#quicklook-range-default').hidden=low===DEFAULT_QUICKLOOK_RANGE[0]&&high===DEFAULT_QUICKLOOK_RANGE[1];
+  $$('[data-quicklook-preset]').forEach(button=>button.setAttribute('aria-pressed',String(matchesQuicklookPreset(v,QUICKLOOK_PRESETS[button.dataset.quicklookPreset]))));
+  $('#quicklook-range-default').hidden=matchesQuicklookPreset(v,{types:DEFAULT_SCAVENGING_CATEGORIES,range:DEFAULT_QUICKLOOK_RANGE});
 }
 function renderQuicklookTypeChoices(selected){
   $('#quicklook-type-options').innerHTML=Object.entries(SCAVENGING_CATEGORIES).map(([key,label])=>`<label class="type-choice"><input type="checkbox" data-quicklook-type="${key}" ${selected.includes(key)?'checked':''}><span>${esc(label)}</span></label>`).join('');
@@ -259,7 +263,7 @@ function quicklookTile(r,cell,index){
   const risk=data.flea.enabled&&!i.types.includes('noFlea')&&lowOfferCount(i);
   const status=s.short?`<span class="cloud-signal">${icon('trend')}7日 ${percent(s.change7)}</span>`:s.long?'<span class="cloud-signal">长期高值</span>':'';
   const flag=risk?`<span class="cloud-risk" title="当前仅 ${i.offers} 条报价，可能存在虚标">报价 ${i.offers}</span>`:'';
-  const note=traderWins?`<span class="cloud-vendor">卖 ${esc(vendor)}</span>`:r.fleaNet===null&&vendor?`<span class="cloud-vendor">${esc(vendor)} 回收</span>`:r.status!=='可参考'?`<span class="cloud-age">${esc(r.status)}</span>`:'';
+  const note=traderWins?`<span class="cloud-vendor">卖 ${esc(vendor)}</span>`:r.fleaNet===null&&vendor?`<span class="cloud-vendor">${esc(vendor)} 回收</span>`:'';
   return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · ${esc(r.channel)} · 单格净值 ₽${fmt(r.slotValue)}">
     <span class="cloud-topline">${status}${flag}</span>
     <span class="cloud-art">${image(i.art||i.image,'','cloud-image',i.image)}</span>
@@ -313,7 +317,7 @@ function card(r,index){
     `<span>${r.roi===null?'':`回报率 ${fmt(r.roi*100)}%`}</span><span>预计净回款 ${r.count>1?'×'+r.count+' ':''} ${fmt(r.fleaNet)}</span>`;
 
   const quoteAt=r.quoteAt||i.scan;
-  const quote=r.status==='可参考'?ago(quoteAt):r.status+(quoteAt?' · '+ago(quoteAt):'');
+  const quote=r.status==='可参考'||(loot&&inQuicklook()&&r.status==='报价延迟')?ago(quoteAt):r.status+(quoteAt?' · '+ago(quoteAt):'');
   return `<article style="--order:${Math.min(index,7)}" class="card ${opportunityTone(r,s)}" data-row="${esc(r.id)}">
   <div class="card-main" role="button" tabindex="0" data-open="${esc(r.id)}" aria-label="查看${esc(i.name)}明细">
     <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${i.isPreset?`<span class="tag">${i.category==='weapon'?'武器预设':'装备预设'}</span>`:''}${tags(r,s)||(i.isPreset?'':esc(CATEGORIES[i.category]))}</div></div><div class="money"><strong class="${loot?'':r.profit<0?'negative':'positive'}">${value}</strong><span class="unit">${label}</span></div></div>
@@ -597,7 +601,10 @@ document.addEventListener('click',event=>{
   if(target.hasAttribute('data-retry'))refresh(true);
   if(target.dataset.days){chartDays=Number(target.dataset.days);$$('[data-days]').forEach(b=>b.classList.toggle('active',Number(b.dataset.days)===chartDays));historyDetail();}
   if(target.dataset.quicklookView){view().quicklookView=target.dataset.quicklookView;animateNext=true;render();persist();}
-  if(target.id==='quicklook-everyday'||target.id==='quicklook-range-default'){view().quicklookRange=[...(target.id==='quicklook-everyday'?EVERYDAY_QUICKLOOK_RANGE:DEFAULT_QUICKLOOK_RANGE)];render();persist();}
+  if(target.dataset.quicklookPreset||target.id==='quicklook-range-default'){
+    const preset=QUICKLOOK_PRESETS[target.dataset.quicklookPreset]||{types:DEFAULT_SCAVENGING_CATEGORIES,range:DEFAULT_QUICKLOOK_RANGE};
+    view().quicklookTypes=[...preset.types];view().quicklookRange=[...preset.range];animateNext=true;render();persist();
+  }
   if(target.dataset.quicklookSelect){const choice=target.dataset.quicklookSelect;$$('[data-quicklook-type]').forEach(el=>el.checked=choice==='all'||(choice==='default'&&DEFAULT_SCAVENGING_CATEGORIES.includes(el.dataset.quicklookType)));}
   if(target.id==='quicklook-repack'){quicklookPlan=null;animateNext=true;render(true);}
   if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;animateNext=true;render();persist();}
