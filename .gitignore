@@ -20,3 +20,6 @@ next-env.d.ts
 npm-debug.log*
 coverage/
 outputs/
+/public/radar.css
+/public/radar.js
+/public/engine.js
