@@ -1,61 +1,76 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <title>塔科夫赚钱旁屏 · 真实行情</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#202b28">
+  <meta name="description" content="塔科夫 PVE / PVP 赚钱旁屏。真实物品报价、单格净值、商人倒货和藏身处制作，三列同时掌握。">
+  <title>塔科夫赚钱旁屏 · LOOT RADAR</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/radar.css">
 </head>
 <body>
-<div id="app">
-  <header>
-    <h1>塔科夫赚钱旁屏</h1>
-    <span class="source-badge">tarkov.dev 行情</span>
-    <label>市场 <select id="market" aria-label="市场"><option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="pvp-season">PVP 赛季</option></select></label>
-    <label class="search"><input id="search" type="search" aria-label="搜索物品、材料或设施" placeholder="搜索物品 / 材料 / 设施"></label>
-    <button id="refresh" type="button">刷新</button>
-    <button id="settings-button" type="button">收益设置</button>
-  </header>
-  <div class="toolbar">
-    <label>分类 <select id="category" aria-label="物品分类"><option value="all">全部物品</option></select></label>
-    <div class="filter-group" aria-label="行情类型">
-      <button type="button" data-filter="all" aria-pressed="true">全部</button>
-      <button type="button" data-filter="short" aria-pressed="false">短线</button>
-      <button type="button" data-filter="long" aria-pressed="false">长线</button>
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="塔科夫赚钱旁屏首页">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><circle cx="20" cy="20" r="9"/><path d="M20 4v16l11 11M4 20h5m22 0h5M20 31v5"/><circle class="radar-dot" cx="12" cy="13" r="2"/></svg>
+      <span><strong>塔科夫赚钱旁屏</strong><small>LOOT RADAR <span>／ 物尽其价</span></small></span>
+    </a>
+    <nav class="market-tabs" aria-label="市场"><button data-market="pve" aria-pressed="true">PVE</button><button data-market="regular" aria-pressed="false">PVP 常规</button><button data-market="pvp-season" aria-pressed="false">PVP 赛季</button></nav>
+    <div class="top-actions">
+      <span class="sync-status"><i id="connection-dot"></i><span id="status" role="status">获取行情中</span></span>
+      <button class="icon-button" id="refresh" data-icon="refresh" aria-label="刷新行情" title="刷新行情"></button>
+      <button class="icon-button" id="pause" data-icon="pause" aria-label="暂停自动应用行情" title="暂停自动应用行情" aria-pressed="false"></button>
+      <button class="icon-button wide-only" id="fullscreen" data-icon="expand" aria-label="全屏旁屏" title="全屏旁屏"></button>
+      <button class="icon-button" id="theme" data-icon="moon" aria-label="切换深浅外观" title="切换深浅外观"></button>
+      <button class="settings-button" id="settings-button"><span data-icon="sliders"></span><span>我的条件</span></button>
     </div>
-    <label>堆叠 <select id="stack" aria-label="堆叠数量"><option value="single">单个 / 单发</option><option value="full">满堆叠</option></select></label>
-    <span class="legend"><span class="red-dot"></span>短期暴涨 <span class="green-dot"></span>长期稳定</span>
-    <span id="status" role="status">正在获取行情…</span>
+  </header>
+  <div class="overview">
+    <div><span class="overview-label">可估值物品</span><strong id="overview-loot">—</strong><span id="catalog-count" class="subtle">全品类覆盖</span></div>
+    <div><span class="overview-label">正收益倒货</span><strong id="overview-flips">—</strong><span id="direct-count" class="subtle">直购 + 兑换</span></div>
+    <div><span class="overview-label">制作机会</span><strong id="overview-crafts">—</strong><span id="fuel-status" class="subtle">燃料待配置</span></div>
+    <div class="overview-source"><span class="live-dot"></span>tarkov.dev 行情<span class="source-divider"></span><button id="method-button">计算口径 <span data-icon="info"></span></button></div>
   </div>
-  <div id="warning" role="alert" hidden></div>
+  <div class="toolbar">
+    <label class="search"><span data-icon="search"></span><input id="search" type="search" aria-label="搜索物品、材料或设施" placeholder="物品、材料、简称…"><kbd>/</kbd></label>
+    <select id="category" aria-label="物品分类"><option value="all">全部分类</option></select>
+    <div class="filter-tabs" aria-label="行情类型"><button data-filter="all" aria-pressed="true">全部</button><button data-filter="short" aria-pressed="false"><i class="legend-dot red"></i>短线</button><button data-filter="long" aria-pressed="false"><i class="legend-dot green"></i>长线</button><button data-filter="favorites" aria-pressed="false"><span data-icon="star"></span>收藏<span id="favorite-count"></span></button></div>
+    <div class="toolbar-right"><label class="event-toggle"><input id="include-events" type="checkbox"><span>活动限定</span></label><select id="stack" aria-label="堆叠数量"><option value="single">单件 / 单发</option><option value="full">满堆叠</option></select><button id="filter-button" class="filter-button"><span data-icon="filter"></span><span>筛选</span><i id="filter-active" hidden></i></button></div>
+  </div>
+  <div id="warning" class="notice warning" role="alert" hidden></div>
+  <div id="pending" class="notice pending" hidden><span><span data-icon="refresh"></span>有新行情，阅读位置已保留</span><button id="apply-pending">应用更新</button></div>
   <main class="columns">
-    <section class="column">
-      <div class="column-head"><h2>跳蚤卖出 · 单格价值 <span id="loot-count"></span></h2><div class="subhead"><span>预计单格净到手 ↓</span><span id="catalog-count"></span></div></div>
-      <div class="list" id="loot" aria-label="拾取与出售，独立滚动"><p class="empty">加载物品与价格…</p></div>
-    </section>
-    <section class="column">
-      <div class="column-head"><h2>商人倒货 <span id="flips-count"></span></h2><div class="subhead"><span>每次预计净利润 ↓</span><select id="flip-type" aria-label="倒货类型"><option value="all">直购 + 兑换</option><option value="buy">只看直购</option><option value="barter">只看兑换</option></select></div></div>
-      <div class="list" id="flips" aria-label="倒货，独立滚动"><p class="empty">同时检查直购和兑换…</p></div>
-    </section>
-    <section class="column">
-      <div class="column-head"><h2>藏身处制作 <span id="crafts-count"></span></h2><div class="subhead"><span id="craft-basis">扣燃料前收益 / 小时 ↓</span><button type="button" id="fuel-button">设置燃料</button></div></div>
-      <div class="list" id="crafts" aria-label="制作，独立滚动"><p class="empty">核对材料与产物价格…</p></div>
-    </section>
+    <section class="column loot-column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="backpack"></span><h1>捡什么 · 卖什么</h1><span class="count" id="loot-count">—</span></div><div class="column-sub"><span>单格净到手 <span data-icon="arrow-down"></span></span><span>卢布 ₽</span></div></div><div class="list" id="loot" tabindex="0" aria-label="拾取与出售，独立滚动"></div></section>
+    <section class="column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="exchange"></span><h2>商人倒货</h2><span class="count" id="flips-count">—</span></div><div class="column-sub"><span>每次预计净利润 <span data-icon="arrow-down"></span></span><select id="flip-type" aria-label="倒货类型"><option value="all">直购 + 兑换</option><option value="buy">只看直购</option><option value="barter">只看兑换</option></select></div></div><div class="list" id="flips" tabindex="0" aria-label="倒货，独立滚动"></div></section>
+    <section class="column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="craft"></span><h2>藏身处制作</h2><span class="count" id="crafts-count">—</span></div><div class="column-sub"><span id="craft-basis">每小时收益 <span data-icon="arrow-down"></span></span><button id="fuel-button">设置燃料 <span data-icon="chevron"></span></button></div></div><div class="list" id="crafts" tabindex="0" aria-label="制作，独立滚动"></div></section>
   </main>
-  <footer><span id="coverage">不使用演示价格或手工趋势标签</span><a href="https://tarkov.dev" target="_blank" rel="noreferrer">数据来源 ↗</a><details><summary>计算口径</summary><p>每 5 分钟检查上游数据，报价时间逐项显示。左列允许 1 至 6 小时的延迟报价作参考，超过 6 小时只显示商人底价；倒货、材料和短线分析只使用 60 分钟内、至少 3 条且未明显偏离均价的报价。材料按当前最低报价与 24 小时均价中较高者计算；本轮库存未知。分类覆盖全部物品，已排除列入规则的活动限定品，尚不保证活动过滤完整。短线须历史基准、近期涨幅和两个有效快照共同确认；未积累长期成本证据时不标长线。报价不等于成交价，上架费为当前公共参数估算。</p></details></footer>
+  <footer><span id="coverage">正在核对物品、商人和配方</span><div><span class="legend-dot red"></span>短期涨价<span class="legend-dot green"></span>长期高值 / 稳定收益<button id="history-status">历史核验中</button><a href="https://tarkov.dev" target="_blank" rel="noreferrer">数据源 ↗</a></div></footer>
 </div>
-<dialog id="settings">
-  <form method="dialog"><h2>收益设置</h2><p>保存在此浏览器，按市场分别记忆。</p>
-    <label>角色等级 <input id="player-level" type="number" min="1" max="79" placeholder="未配置：展示条件"></label>
-    <label>情报中心 <select id="intelligence"><option value="0">未建 / 0 级</option><option value="1">1 级</option><option value="2">2 级</option><option value="3">3 级</option></select></label>
-    <label>藏身处管理技能 <input id="management" type="number" min="0" max="51" value="0"></label>
-    <label>本工位燃料分摊（₽ / 小时） <input id="fuel" type="number" min="0" step="100" placeholder="未填：只显示扣燃料前收益"></label>
-    <p>填 0 表示采用“发电机本就运行”的增量成本口径。多个并行工位应分摊燃料，不要重复全额扣除。</p>
-    <p>商人等级、任务与设施条件列在建议中；当前未连接你的角色档案。</p>
-    <div class="dialog-actions"><button value="cancel">取消</button><button value="save" class="primary">保存</button></div>
+<dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title"><div class="drawer-top"><span>物品与收益明细</span><button class="icon-button close-dialog" data-close="detail-dialog" data-icon="x" aria-label="关闭明细"></button></div><div id="detail-content"></div></dialog>
+<dialog id="settings" class="settings-dialog" aria-labelledby="settings-title">
+  <form id="profile-form" method="dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">PLAYER PROFILE</span><h2 id="settings-title">我的条件 <span id="profile-market"></span></h2></div><button value="cancel" class="icon-button" data-icon="x" aria-label="取消设置" formnovalidate></button></div>
+    <div class="settings-scroll">
+      <p class="help">按市场保存在这台设备。留空表示未确认，不会假设你已全部解锁。</p>
+      <div class="settings-grid">
+        <label>角色等级<input id="player-level" type="number" min="1" max="79" placeholder="未配置"></label>
+        <label>情报中心<select id="intelligence"><option value="0">未建 / 0 级</option><option value="1">1 级</option><option value="2">2 级</option><option value="3">3 级</option></select></label>
+        <label>藏身处管理技能<input id="management" type="number" min="0" max="51" value="0"></label>
+        <label>材料成本<select id="material-mode"><option value="buy">新购材料成本</option><option value="owned">已有材料可卖净值</option></select></label>
+        <label>默认燃料分摊 · ₽/小时<input id="fuel" type="number" min="0" step="100" placeholder="未填：显示扣燃料前收益"></label>
+        <label>游戏版本<select id="edition"><option value="">未确认</option><option value="standard">Standard</option><option value="left_behind">Left Behind</option><option value="prepare_for_escape">Prepare for Escape</option><option value="edge_of_darkness">Edge of Darkness</option><option value="unheard_edition">The Unheard Edition</option><option value="eod_tue_edition">EOD → Unheard</option></select></label>
+      </div>
+      <h3>商人忠诚度</h3><div class="settings-grid levels" id="trader-settings"></div>
+      <h3>设施等级与燃料分摊</h3><p class="help">单独分摊优先于默认值；填 0 表示该工位不承担额外燃料成本。</p><div id="station-settings" class="station-settings"></div>
+      <h3>已完成的解锁任务</h3><input id="task-search" type="search" placeholder="搜索建议涉及的任务" aria-label="搜索解锁任务"><div id="task-settings" class="task-settings"></div>
+      <h3>设置备份与接口</h3><div class="utility-actions"><button type="button" id="export-settings">导出设置</button><button type="button" id="import-settings">导入设置</button><button type="button" id="restore-hidden">恢复隐藏物品</button><button type="button" id="qq-preview">QQ 摘要接口</button></div><input type="file" id="import-file" accept="application/json,.json" hidden>
+    </div>
+    <div class="dialog-actions"><button value="cancel" formnovalidate>取消</button><button value="save" class="primary">保存条件</button></div>
   </form>
 </dialog>
-<script type="module" src="/app.js"></script>
+<dialog id="filters" class="small-dialog" aria-labelledby="filters-title"><form method="dialog" id="filter-form"><div class="dialog-heading"><h2 id="filters-title">把机会缩小到适合你的范围</h2><button value="cancel" class="icon-button" data-icon="x" aria-label="取消筛选" formnovalidate></button></div><div class="settings-grid"><label>最低单格净值 · ₽<input id="min-slot" type="number" min="0" step="1000"></label><label>最低单次 / 每批收益 · ₽<input id="min-profit" type="number" min="0" step="1000"></label><label>最大材料 / 进货预算 · ₽<input id="budget" type="number" min="0" step="10000" placeholder="不限"></label><label>最长制作时间 · 小时<input id="max-hours" type="number" min="0" step=".5" placeholder="不限"></label></div><label class="check-line"><input id="only-executable" type="checkbox">仅显示条件已确认的倒货与制作</label><label class="check-line"><input id="fresh-only" type="checkbox">左列只显示一小时内的跳蚤报价</label><p class="help">商人库存仍需在游戏中确认。收藏筛选也保持单格价值倒序。</p><div class="dialog-actions"><button type="button" id="clear-filters">清除筛选</button><button value="save" class="primary">应用筛选</button></div></form></dialog>
+<dialog id="info-dialog" class="small-dialog" aria-labelledby="info-title"><div class="dialog-heading"><h2 id="info-title">计算口径与数据状态</h2><button class="icon-button" data-close="info-dialog" data-icon="x" aria-label="关闭说明"></button></div><div id="info-content"></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script type="module" src="/radar.js"></script>
 </body>
 </html>

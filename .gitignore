@@ -9,3 +9,14 @@ work/
 __pycache__/
 .DS_Store
 Thumbs.db
+dist/
+.next/
+.vinext/
+.wrangler/
+.sites-runtime/
+.dev.vars*
+next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*
+coverage/
+outputs/

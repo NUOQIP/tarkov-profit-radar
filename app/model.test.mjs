@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus } from './model.mjs';
+import { fleaFee, normalizeSnapshot, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -90,4 +90,70 @@ test('missing scan or too few offers cannot yield trade recommendations',()=>{
   const data=dataset([]);
   assert.equal(quoteStatus(item('a',{scan:null}),data,{},now),'无报价');
   assert.equal(quoteStatus(item('a',{offers:1}),data,{},now),'报价不足');
+});
+
+test('event switch preserves database records and never enables currencies',()=>{
+  const event=item('event',{eventOnly:true,excluded:true}),cash=item('cash',{currencyOnly:true,excluded:true}),normal=item('normal');
+  const data=dataset([event,cash,normal]);
+  assert.deepEqual(collectLoot(data,{},now).map(r=>r.id),['normal']);
+  assert.deepEqual(collectLoot(data,{includeEvents:true},now).map(r=>r.id),['event','normal']);
+  assert.equal(Object.keys(data.items).length,3);
+});
+
+test('delayed trade estimates are explicit and never confirmed executable',()=>{
+  const i=item('a',{scan:new Date(now-2*3600000).toISOString(),buy:[{trader:'t',priceRUB:30000,currency:'RUB',minTraderLevel:1}]});
+  const data=dataset([i],{traders:{t:{id:'t',name:'商人'}}});
+  const options={allowDelayedTrades:true,playerLevel:30,traderLevels:{t:4}};
+  const [estimate]=collectFlips(data,options,now);
+  assert.equal(estimate.status,'报价延迟');assert.equal(estimate.execution.executable,false);
+  assert.equal(collectFlips(data,{...options,onlyExecutable:true},now).length,0);
+});
+
+test('verified LL and quest unlocks are required before cheaper trader material costs',()=>{
+  const task='0123456789abcdef01234567';
+  const i=item('m',{buy:[{trader:'t',priceRUB:20000,currency:'RUB',minTraderLevel:2,taskUnlock:task}]});
+  const data=dataset([i]);
+  assert.equal(procurement(i,data,{traderLevels:{t:4}},now).cost,100000);
+  assert.equal(procurement(i,data,{traderLevels:{t:2},completedTasks:[task]},now).cost,20000);
+});
+
+test('owned materials use sale opportunity cost, never zero',()=>{
+  const output=item('o'),material=item('m',{price:20000,average:20000,basePrice:20000,sell:[]});
+  const data=dataset([output,material],{barters:[{id:'b',trader:'t',minTraderLevel:1,offeredItem:{item:'o',count:1},requiredItems:[{item:'m',count:2}]}]});
+  assert.equal(collectFlips(data,{materialMode:'owned'},now)[0].purchase,36000);
+});
+
+test('station fuel override and negative outcomes remain measurable',()=>{
+  const output=item('o');
+  const data=dataset([output],{crafts:[{id:'c',station:'s',duration:7200,level:1,productItem:{item:'o',count:1},requiredItems:[]}]});
+  assert.equal(collectCrafts(data,{fuelPerHour:5000,stationFuel:{s:0}},now)[0].fuel,0);
+  assert.equal(collectCrafts(data,{fuelPerHour:100000},now).length,0);
+  assert.ok(collectCrafts(data,{fuelPerHour:100000,includeLosses:true},now)[0].profit<0);
+});
+
+test('long-term value needs 24 complete valid days and cannot be created from one day',()=>{
+  const i=item('stable'),data=dataset([i]),start=Math.floor(now/86400000)*86400000;
+  const points=Array.from({length:26},(_,n)=>({priceMin:100000,timestamp:start-(n+1)*86400000+3600000,offerCount:10}));
+  assert.equal(analyzeHistory(points,i,data,{},now).long,true);
+  assert.equal(analyzeHistory(points.slice(0,23),i,data,{},now).long,false);
+  assert.equal(analyzeHistory(points.map(p=>({...p,offerCount:1})),i,data,{},now).long,false);
+});
+
+test('sale scenarios recompute nonlinear fees and honor flea restrictions',()=>{
+  const i=item('a'),data=dataset([i]),[row]=collectLoot(data,{},now);
+  const low=scenario(row,data,{},50000);
+  assert.equal(low.fee,fleaFee(i.basePrice,50000,data.flea));
+  assert.notEqual(low.fee,row.fee*.5);
+  assert.equal(scenario({...row,item:{...i,types:['noFlea']}},data,{},50000),null);
+});
+
+test('profile import bounds inputs and ignores malformed ID collections',()=>{
+  const p=normalizeProfile({playerLevel:999,fuelPerHour:-1,intelligence:5,completedTasks:'not an array',ownedTools:['x'],stationFuel:{s:0}});
+  assert.equal(p.playerLevel,79);assert.equal(p.intelligence,3);assert.equal(p.fuelPerHour,0);assert.deepEqual(p.completedTasks,[]);assert.equal(p.stationFuel.s,0);
+});
+
+test('no paired history means no fabricated long-term trade profit',()=>{
+  const i=item('a',{buy:[{trader:'t',priceRUB:10000,currency:'RUB',minTraderLevel:1}]}),data=dataset([i]);
+  const [row]=collectFlips(data,{},now);
+  assert.equal(profitStability([],row,data,{}).long,false);
 });
