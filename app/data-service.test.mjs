@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordDay,handleApi,r2Store } from './data-service.mjs';
+import { recordDay,handleApi,r2Store,snapshot } from './data-service.mjs';
 const now=Date.parse('2026-10-21T03:00:00Z');
 function memoryStore(){
   const entries=new Map();
@@ -34,4 +34,20 @@ test('R2 ledger update retries a concurrent writer without dropping its observat
   };
   await r2Store(bucket).update('test.json',old=>({hours:[...(old?.hours||[]),2]}));
   assert.deepEqual(value.hours,[1,2]);
+});
+
+test('a stalled hosted request cannot hold a later request behind its I/O promise',async()=>{
+  const data={...fixture(),version:2,market:'regular',fetchedAt:new Date().toISOString()};
+  let release,reads=0;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const bucket={async get(){reads++;if(reads===1)await gate;return {json:async()=>structuredClone(data)};}};
+  const first=snapshot(r2Store(bucket),'regular');
+  let timer;
+  try{
+    const next=await Promise.race([
+      snapshot(r2Store(bucket),'regular'),
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('later request joined stalled request')),150);})
+    ]);
+    assert.equal(next.market,'regular');assert.equal(reads,2);
+  }finally{clearTimeout(timer);release();await first;}
 });

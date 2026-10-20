@@ -61,7 +61,12 @@ let catalogRows=[],catalogById=new Map(),catalogPage=1,detailTrail=[],routeIndex
 const catalogPageSize=60,screenScroll={monitor:{loot:0,flips:0,crafts:0},items:0};
 const histories=new Map(),historyRequests=new Map();
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,3500);}
-async function api(path,market=state.market){const response=await fetch(`/api/${path}${path.includes('?')?'&':'?'}market=${market}`);const result=await response.json();if(!response.ok)throw new Error(result.error||'请求失败');return result;}
+async function api(path,market=state.market){
+  try{
+    const response=await fetch(`/api/${path}${path.includes('?')?'&':'?'}market=${market}`,{signal:AbortSignal.timeout(45000)});
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'请求失败');return result;
+  }catch(error){if(error.name==='TimeoutError'||error.name==='AbortError')throw new Error('行情连接超时，请点击刷新重试');throw error;}
+}
 function syncControls(){
   const v=view();if(!CATEGORIES[v.category]&&v.category!=='all')v.category='all';
   if(!['all','short','long','favorites'].includes(v.filter))v.filter='all';

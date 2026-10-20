@@ -2,11 +2,15 @@ import { MARKETS, MODEL_VERSION, normalizeSnapshot, collectLoot, collectFlips, c
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
   set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
-}(), inflight=new Map();
+}(), inflight=new WeakMap();
 const keyFor=(store,key)=>`${store.namespace}:${key}`;
-async function once(key,fn) {
-  if(inflight.has(key)) return inflight.get(key);
-  const work=fn().finally(()=>inflight.delete(key));inflight.set(key,work);return work;
+async function once(store,key,fn) {
+  // R2 stores are created per request. Do not share an in-flight I/O promise across
+  // Worker requests: a disconnected caller can otherwise strand later callers.
+  let pending=inflight.get(store);
+  if(!pending){pending=new Map();inflight.set(store,pending);}
+  if(pending.has(key))return pending.get(key);
+  const work=fn().finally(()=>pending.delete(key));pending.set(key,work);return work;
 }
 async function upstream(path) {
   const response=await fetch(`https://json.tarkov.dev/${path}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)});
@@ -42,7 +46,7 @@ async function cachedSource(store,market,name,maxAge) {
 }
 export async function snapshot(store,market) {
   const key=`snapshot/${market}.json`,memoryKey=keyFor(store,key);
-  return once(memoryKey,async()=>{
+  return once(store,memoryKey,async()=>{
     const prior=cache.get(memoryKey)||await store.read(key);
     if(prior?.version===2&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
     try{
@@ -90,7 +94,7 @@ export async function recordDay(store,data,now=Date.now()) {
   return prior;
   };
   if(store.update)await store.update(key,change);
-  else await once(keyFor(store,`write/${key}`),async()=>{const next=change(await store.read(key));if(next)await store.write(key,next);});
+  else await once(store,keyFor(store,`write/${key}`),async()=>{const next=change(await store.read(key));if(next)await store.write(key,next);});
   cache.delete(keyFor(store,`ledger-index/${data.market}`));
 }
 export async function profitHistory(store,market,now=Date.now()) {
@@ -111,7 +115,7 @@ export async function profitHistory(store,market,now=Date.now()) {
 }
 export async function history(store,market,id) {
   const key=`history/${market}/${id}.json`,memoryKey=keyFor(store,key);
-  return once(memoryKey,async()=>{
+  return once(store,memoryKey,async()=>{
     const old=cache.get(memoryKey)||await store.read(key);
     if(old&&Date.now()-old.at<30*MINUTE)return old;
     try{
@@ -125,7 +129,7 @@ export async function history(store,market,id) {
 }
 export async function scanSignals(store,data,limit=12) {
   const key=`signals/${data.market}.json`,memoryKey=keyFor(store,key);
-  return once(memoryKey,async()=>{
+  return once(store,memoryKey,async()=>{
     const book=await store.read(key)||{entries:{},cursor:0,checkedAt:null};
     const candidates=collectLoot(data,{includeEvents:true}).filter(r=>['可参考','报价延迟'].includes(r.status)&&(r.slotValue>=20000||r.item.change48>=10));
     const rising=[...candidates].filter(r=>r.status==='可参考'&&r.item.change48>=10).sort((a,b)=>b.item.change48-a.item.change48);
