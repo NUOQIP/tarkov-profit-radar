@@ -61,3 +61,14 @@
 - API 访问策略、数据与素材署名、结构变更检测及国内访问表现。
 - 历史配方、商人价格、燃料和手续费版本；缺失区间不得称为精确历史利润。
 - 市场最低扫描价与可执行买入成本的差异，以及异常低价、高价的过滤。
+
+## 交互预览素材与示例
+
+三列预览使用实际物品、商人和设施图标。素材由以下公开仓库的固定版本经 jsDelivr 直接引用：
+
+- [Tarkov Raid Items](https://github.com/fakundo/tarkov-raid-items)：版本 `970988a8e0ce3dd9389e438f4adafbb64a7c78ae`，物品图片；提供方说明来自游戏图标缓存。
+- [RatScanner / EfTIcons](https://github.com/RatScanner/EfTIcons)：版本 `b2ae54d5d63441f1623ecd1c7e8087a516af3881`，白糖、液晶屏、材料等物品图片。
+- [Tarkynator](https://github.com/emilanderss0n/tarkynator)：版本 `2b7ac63aa8af0de2b78dddbc83f1b7b641178630`，滤芯和应急饮用水图片。
+- [tarkov.dev 前端](https://github.com/the-hideout/tarkov-dev)：版本 `ec44177bd3c21aa2b33938153acd0a96dbd939aa`，商人头像和设施图片。
+
+兑换、制作材料和设施等级依据已读取的 PVE 配方示例；挂牌价、手续费、成本、历史涨幅和稳定性是演示值。市场切换中的金额变化也是交互演示，不是三个市场的真实比较。预览不请求实时价格、不生成虚构刷新时间。图像和游戏内容属于各自权利人；正式公开版需核验当前素材、署名与使用条件。

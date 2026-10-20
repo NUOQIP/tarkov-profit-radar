@@ -1,195 +1,337 @@
 <style>
-#eft-side {
-  --es-bg:light-dark(#f3f4ee,#131811);--es-panel:light-dark(#ffffff,#1c2419);
-  --es-fg:light-dark(#253021,#e7eddc);--es-muted:light-dark(#5c6854,#a8b39d);
-  --es-line:light-dark(#d8e0ce,#35422d);--es-accent:light-dark(#386322,#c2df86);
-  --es-selected:light-dark(#e9f2dd,#304326);--es-amber:light-dark(#80511b,#ecc188);
-  --es-size:16px;
-  width:100%;border:1px solid var(--es-line);border-radius:14px;overflow:clip;
-  background:var(--es-bg);color:var(--es-fg);font:var(--es-size)/1.5 system-ui,"Microsoft YaHei",sans-serif;
+#eft-radar {
+  --er-bg:light-dark(#edf0ec,#131713);
+  --er-panel:light-dark(#ffffff,#1d241e);
+  --er-text:light-dark(#233027,#e5ece5);
+  --er-muted:light-dark(#5c6b60,#acb9ad);
+  --er-line:light-dark(#d3dcd4,#3a473b);
+  --er-green-bg:light-dark(#edf7ed,#243929);
+  --er-green:light-dark(#2e683b,#b7ddba);
+  --er-red-bg:light-dark(#fff0ef,#3b2929);
+  --er-red:light-dark(#9b4543,#f1b5af);
+  --er-active:light-dark(#294a34,#d4e6cc);
+  --er-on-active:light-dark(#ffffff,#203026);
+  --er-image:light-dark(#e2e7e0,#313b31);
+  --er-space:11px;
+  width:100%;background:var(--er-bg);color:var(--er-text);
+  border:1px solid var(--er-line);border-radius:12px;overflow:clip;
+  font:14px/1.45 system-ui,"Microsoft YaHei",sans-serif;
 }
-#eft-side *{box-sizing:border-box}
-#eft-side [hidden]{display:none!important}
-#eft-side button,#eft-side select,#eft-side input{font:inherit;color:inherit;border:1px solid var(--es-line);background:var(--es-panel);border-radius:7px;padding:8px 12px}
-#eft-side button:hover{background:var(--es-selected)}
-#eft-side button[aria-pressed="true"]{color:var(--es-accent);background:var(--es-selected);border-color:var(--es-accent)}
-#eft-side .es-head{padding:16px 110px 13px 22px;display:flex;align-items:center;gap:12px 26px;flex-wrap:wrap;background:var(--es-panel);border-bottom:1px solid var(--es-line)}
-#eft-side .es-brand{font-size:23px;font-weight:600;letter-spacing:-.6px}
-#eft-side .es-caption{font-size:12px;color:var(--es-muted)}
-#eft-side .es-market{display:flex;gap:8px;align-items:center;font-size:14px;flex-wrap:wrap}
-#eft-side .es-toolbar{padding:12px 20px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-#eft-side #es-search{flex:1 1 180px;min-width:0;max-width:310px}
-#eft-side .es-scenes{display:flex;gap:5px;flex-wrap:wrap}
-#eft-side .es-demo{font-size:12px;color:var(--es-amber);padding:0 22px 10px}
-#eft-side .es-main{padding:0 20px 18px}
-#eft-side .es-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;align-items:start}
-#eft-side .es-panel{border:1px solid var(--es-line);background:var(--es-panel);border-radius:10px;overflow:clip}
-#eft-side .es-panel-head{padding:12px 16px 10px;border-bottom:1px solid var(--es-line);display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
-#eft-side h2{font-size:18px;font-weight:500;margin:0;line-height:1.4}
-#eft-side .es-small{font-size:12px;color:var(--es-muted)}
-#eft-side .es-row{padding:10px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-bottom:1px solid var(--es-line)}
-#eft-side .es-row:last-child{border-bottom:0}
-#eft-side .es-row.es-picked{background:var(--es-selected)}
-#eft-side .es-item{font-size:var(--es-name-size,17px);font-weight:500;margin-bottom:2px;overflow-wrap:anywhere}
-#eft-side .es-badge{font-size:11px;font-weight:400;color:var(--es-accent);margin-left:5px;white-space:nowrap}
-#eft-side .es-badge.es-hot{color:var(--es-amber)}
-#eft-side .es-amount{font-size:var(--es-amount-size,23px);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:-.6px}
-#eft-side .es-action{border:0;background:transparent;padding:2px 0;text-align:right;min-width:95px}
-#eft-side .es-action:hover{background:transparent;text-decoration:underline}
-#eft-side .es-note{font-size:12px;color:var(--es-muted);overflow-wrap:anywhere}
-#eft-side .es-row .es-side{font-size:11px;color:var(--es-muted);text-align:right}
-#eft-side .es-rest{padding:12px 15px;background:var(--es-selected);font-size:13px}
-#eft-side .es-strip{margin-top:14px;padding:12px 15px;border:1px solid var(--es-line);border-radius:9px;background:var(--es-panel);display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap}
-#eft-side .es-strip button{font-size:13px;padding:6px 9px}
-#eft-side .es-detail{margin-top:14px;padding:10px 16px;border-left:3px solid var(--es-accent);background:var(--es-panel);display:flex;gap:7px 22px;flex-wrap:wrap;align-items:baseline}
-#eft-side .es-detail strong{font-weight:500;font-size:16px}
-#eft-side .es-calculation{font-size:13px;color:var(--es-muted)}
-#eft-side .es-result{font-size:19px;color:var(--es-accent);font-variant-numeric:tabular-nums}
-#eft-side .es-rule{font-size:12px;color:var(--es-muted);width:100%}
-#eft-side .es-footer{padding:8px 20px;border-top:1px solid var(--es-line);display:flex;justify-content:space-between;gap:5px 12px;flex-wrap:wrap;font-size:12px;color:var(--es-muted)}
-#eft-side .es-empty{padding:22px 16px;color:var(--es-muted)}
-@media(max-width:650px){
-  #eft-side .es-grid{grid-template-columns:1fr}
-  #eft-side .es-head{padding-left:16px}
-  #eft-side .es-toolbar{padding:12px}
-  #eft-side .es-main{padding:0 12px 14px}
-  #eft-side .es-demo{padding-left:14px}
-  #eft-side .es-brand{font-size:21px}
-  #eft-side .es-row{padding:12px}
-  #eft-side .es-amount{font-size:21px}
-  #eft-side .es-item{font-size:16px}
+#eft-radar *{box-sizing:border-box}
+#eft-radar [hidden]{display:none!important}
+#eft-radar button,#eft-radar input,#eft-radar select{font:inherit;color:inherit}
+#eft-radar button,#eft-radar select,#eft-radar input{border:1px solid var(--er-line);border-radius:6px;background:var(--er-panel);padding:6px 10px;min-height:34px}
+#eft-radar button:hover{background:var(--er-bg)}
+#eft-radar button[aria-pressed="true"]{background:var(--er-active);color:var(--er-on-active);border-color:var(--er-active)}
+#eft-radar .er-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 106px 12px 18px;background:var(--er-panel);border-bottom:1px solid var(--er-line)}
+#eft-radar .er-brand{display:flex;align-items:center;gap:8px;margin:0;font-size:21px;letter-spacing:-.6px;font-weight:600}
+#eft-radar .er-brand svg{width:21px;height:21px;color:var(--er-green)}
+#eft-radar .er-demo{font-size:12px;color:var(--er-muted);border:1px solid var(--er-line);padding:2px 7px;border-radius:4px}
+#eft-radar .er-market{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:13px}
+#eft-radar .er-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px}
+#eft-radar .er-search{display:flex;align-items:center;position:relative;flex:1 1 170px;max-width:270px}
+#eft-radar .er-search svg{position:absolute;left:9px;width:15px;height:15px;color:var(--er-muted);pointer-events:none}
+#eft-radar #er-search{width:100%;min-width:0;padding-left:31px}
+#eft-radar .er-filters{display:flex;gap:4px}
+#eft-radar .er-filters button{font-size:13px;padding:6px 9px}
+#eft-radar .er-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--er-muted);align-items:center;margin-left:auto}
+#eft-radar .er-key{display:flex;gap:5px;align-items:center;white-space:nowrap}
+#eft-radar .er-dot{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--er-green)}
+#eft-radar .er-dot-red{background:var(--er-red)}
+#eft-radar .er-board{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr) minmax(0,1fr);gap:10px;padding:0 12px 12px}
+#eft-radar .er-column{min-width:0;background:var(--er-panel);border:1px solid var(--er-line);border-radius:8px;overflow:hidden}
+#eft-radar .er-colhead{padding:11px 12px 10px;border-bottom:1px solid var(--er-line)}
+#eft-radar .er-titleline{display:flex;align-items:center;gap:7px}
+#eft-radar .er-titleline svg{width:17px;height:17px;color:var(--er-muted)}
+#eft-radar h2{font-size:16px;font-weight:600;margin:0}
+#eft-radar .er-count{color:var(--er-muted);font-size:12px;margin-left:auto}
+#eft-radar .er-colsub{display:flex;justify-content:space-between;gap:6px;color:var(--er-muted);font-size:12px;margin-top:5px}
+#eft-radar .er-scroll{height:500px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-width:thin;scrollbar-color:var(--er-line) transparent;scrollbar-gutter:stable}
+#eft-radar .er-entry{background:var(--er-panel);border-bottom:1px solid var(--er-line)}
+#eft-radar .er-entry.er-long{background:var(--er-green-bg)}
+#eft-radar .er-entry.er-short{background:var(--er-red-bg)}
+#eft-radar .er-entry:last-child{border-bottom:0}
+#eft-radar summary{list-style:none;padding:var(--er-space);display:block}
+#eft-radar summary::-webkit-details-marker{display:none}
+#eft-radar .er-itemtop{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:8px;align-items:center}
+#eft-radar .er-picture{width:48px;height:48px;background:var(--er-image);border:1px solid var(--er-line);border-radius:5px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#eft-radar .er-picture img{width:100%;height:100%;object-fit:contain}
+#eft-radar .er-rank{position:absolute;bottom:0;left:0;padding:0 3px;background:var(--er-panel);font-size:10px;color:var(--er-muted);line-height:1.3}
+#eft-radar .er-name{font-size:15px;font-weight:600;overflow-wrap:anywhere;line-height:1.35}
+#eft-radar .er-meta{font-size:12px;color:var(--er-muted);margin-top:4px}
+#eft-radar .er-mainvalue{font-size:21px;letter-spacing:-.7px;line-height:1.15;font-weight:600;white-space:nowrap}
+#eft-radar .er-value{font-variant-numeric:tabular-nums}
+#eft-radar .er-valueblock{text-align:right}
+#eft-radar .er-valueblock .er-meta{font-size:11px}
+#eft-radar .er-badges{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:4px;font-size:11px}
+#eft-radar .er-badge{color:var(--er-green);font-weight:500}
+#eft-radar .er-badge.er-hot{color:var(--er-red)}
+#eft-radar .er-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:9px}
+#eft-radar .er-metrics.er-three{grid-template-columns:1fr 1fr 1fr}
+#eft-radar .er-metric{min-width:0}
+#eft-radar .er-metric span{display:block;color:var(--er-muted);font-size:11px}
+#eft-radar .er-metric b{display:block;font-size:13px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+#eft-radar .er-metrics .er-metric:last-child{text-align:right}
+#eft-radar .er-tail{display:flex;justify-content:space-between;gap:5px;align-items:center;margin-top:8px;font-size:11px;color:var(--er-muted)}
+#eft-radar .er-tail .er-surge{color:var(--er-red);font-weight:500}
+#eft-radar .er-expand{white-space:nowrap}
+#eft-radar details[open] .er-expand{transform:rotate(180deg)}
+#eft-radar .er-route{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--er-muted);margin-top:8px;flex-wrap:wrap}
+#eft-radar .er-avatar{width:22px;height:22px;object-fit:contain;border-radius:3px;background:var(--er-image)}
+#eft-radar .er-route .er-limit{margin-left:auto;font-size:11px;white-space:nowrap}
+#eft-radar .er-ingredients{display:flex;align-items:center;gap:5px 8px;flex-wrap:wrap;margin-top:7px}
+#eft-radar .er-ingredient{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--er-text)}
+#eft-radar .er-ingredient img{width:24px;height:24px;object-fit:contain;background:var(--er-image);border-radius:3px}
+#eft-radar .er-detail{margin:0 10px 10px;padding:10px;background:var(--er-panel);border:1px solid var(--er-line);border-radius:6px;font-size:12px}
+#eft-radar .er-detail dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;margin:0}
+#eft-radar .er-detail dt{color:var(--er-muted)}
+#eft-radar .er-detail dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+#eft-radar .er-detail .er-rule{margin-top:9px;padding-top:8px;border-top:1px solid var(--er-line);color:var(--er-muted);line-height:1.6}
+#eft-radar .er-empty{padding:30px 14px;color:var(--er-muted);font-size:13px}
+#eft-radar .er-footer{font-size:11px;padding:0 14px 10px;color:var(--er-muted);display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+#eft-radar .er-footer details{max-width:100%}
+#eft-radar .er-footer summary{padding:0;font-size:11px;text-decoration:underline;text-underline-offset:3px}
+#eft-radar .er-footer .er-ruletext{max-width:760px;padding-top:8px;line-height:1.7}
+#eft-radar .er-sr{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:850px){
+  #eft-radar .er-board{grid-template-columns:1fr}
+  #eft-radar .er-scroll{height:430px}
+  #eft-radar .er-market{margin-left:0}
+  #eft-radar .er-legend{margin-left:0}
+  #eft-radar .er-itemtop{grid-template-columns:52px minmax(0,1fr) auto}
+  #eft-radar .er-picture{width:52px;height:52px}
+  #eft-radar .er-header{padding-left:13px;gap:8px}
+  #eft-radar .er-brand{font-size:20px}
 }
 @media(pointer:coarse){
-  #eft-side button,#eft-side input,#eft-side select{min-height:44px}
-  #eft-side input,#eft-side select{font-size:16px}
+  #eft-radar button,#eft-radar input,#eft-radar select{min-height:44px}
+  #eft-radar input,#eft-radar select{font-size:16px}
+  #eft-radar .er-footer summary{min-height:44px;display:flex;align-items:center}
 }
 </style>
-<div id="eft-side" aria-label="塔科夫笔记本旁屏设计预览">
-  <header class="es-head">
-    <div><div class="es-brand">塔科夫赚钱旁屏</div><div class="es-caption">瞥一眼，就知道下一步</div></div>
-    <label class="es-market">市场
-      <select id="es-mode" class="cursor-interaction"><option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="season">PVP 赛季</option></select>
+<div id="eft-radar" aria-label="塔科夫赚钱旁屏三列预览">
+  <header class="er-header">
+    <h1 class="er-brand"><i data-lucide="radar" aria-hidden="true"></i>塔科夫赚钱旁屏</h1>
+    <span class="er-demo">示例行情 · 非实时</span>
+    <label class="er-market">市场
+      <select id="er-market" class="cursor-interaction" aria-label="市场">
+        <option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="season">PVP 赛季</option>
+      </select>
     </label>
   </header>
-  <div class="es-toolbar">
-    <div class="es-scenes" aria-label="游玩场景">
-      <button type="button" class="cursor-interaction" data-scene="raid" aria-pressed="true">局内速看</button>
-      <button type="button" class="cursor-interaction" data-scene="stash" aria-pressed="false">局外经营</button>
+  <div class="er-toolbar">
+    <label class="er-search">
+      <i data-lucide="search" aria-hidden="true"></i>
+      <input id="er-search" type="search" aria-label="搜索物品、材料或设施" placeholder="搜索物品 / 材料 / 设施">
+    </label>
+    <div class="er-filters" aria-label="收益类型">
+      <button type="button" class="cursor-interaction" data-filter="all" aria-pressed="true">全部</button>
+      <button type="button" class="cursor-interaction" data-filter="short" aria-pressed="false">短线</button>
+      <button type="button" class="cursor-interaction" data-filter="long" aria-pressed="false">长线</button>
     </div>
-    <input id="es-search" type="search" aria-label="搜索演示物品" placeholder="搜索物品、简称…">
+    <div class="er-legend">
+      <span class="er-key"><span class="er-dot er-dot-red"></span>短线 · 近期暴涨</span>
+      <span class="er-key"><span class="er-dot"></span>长线 · 稳定收益</span>
+    </div>
   </div>
-  <div class="es-demo">交互草图 · 所有价格、手续费、趋势与收益均为演示，不能作为当前交易依据</div>
-  <main class="es-main">
-    <div id="es-raid" class="es-grid">
-      <section class="es-panel" aria-label="常备捡取清单">
-        <div class="es-panel-head"><h2>这些值得捡</h2><span class="es-small">预计净到手 / 格</span></div>
-        <div id="es-loot"></div>
-        <div class="es-rest">已隐藏活动限定 · 清单位置固定，刷新不跳动</div>
-      </section>
-      <section class="es-panel" aria-label="短线卖出机会">
-        <div class="es-panel-head"><h2>这会儿卖，更划算</h2><span class="es-small">短线关注</span></div>
-        <div id="es-selling"></div>
-        <div class="es-rest">买入再卖的利润，请看「局外经营」</div>
-      </section>
-    </div>
-    <div id="es-stash" hidden>
-      <div class="es-grid">
-        <section class="es-panel" aria-label="商人倒货">
-          <div class="es-panel-head"><h2>商人倒货</h2><span class="es-small">预计净利润 / 次</span></div>
-          <div id="es-flips"></div>
-          <div class="es-rest">个人条件未配置 · 交易前核对等级与任务</div>
-        </section>
-        <section class="es-panel" aria-label="藏身处制作">
-          <div class="es-panel-head"><h2>藏身处搓什么</h2><span class="es-small">预计净利润 / 小时</span></div>
-          <div id="es-crafts"></div>
-          <div class="es-rest">长配方同时看「按平常价格卖」的利润</div>
-        </section>
+  <main class="er-board">
+    <section class="er-column" aria-labelledby="er-loot-title">
+      <div class="er-colhead">
+        <div class="er-titleline"><i data-lucide="package-open" aria-hidden="true"></i><h2 id="er-loot-title">跳蚤卖出 · 单格价值</h2><span class="er-count" id="er-loot-count"></span></div>
+        <div class="er-colsub"><span>单格净到手 ↓</span><span>常规可获取物资</span></div>
       </div>
-      <div class="es-strip" id="es-strip"></div>
-    </div>
-    <section class="es-detail" id="es-detail" aria-label="所选项目的收益明细" aria-live="polite"></section>
+      <div class="er-scroll" id="er-loot" role="region" aria-label="拾取与跳蚤列表，可独立上下滚动"></div>
+    </section>
+    <section class="er-column" aria-labelledby="er-flip-title">
+      <div class="er-colhead">
+        <div class="er-titleline"><i data-lucide="repeat-2" aria-hidden="true"></i><h2 id="er-flip-title">商人倒货</h2><span class="er-count" id="er-flip-count"></span></div>
+        <div class="er-colsub"><span>每次净利润 ↓</span><span>直购 / 兑换</span></div>
+      </div>
+      <div class="er-scroll" id="er-flip" role="region" aria-label="商人倒货列表，可独立上下滚动"></div>
+    </section>
+    <section class="er-column" aria-labelledby="er-craft-title">
+      <div class="er-colhead">
+        <div class="er-titleline"><i data-lucide="wrench" aria-hidden="true"></i><h2 id="er-craft-title">藏身处制作</h2><span class="er-count" id="er-craft-count"></span></div>
+        <div class="er-colsub"><span>每小时净利润 ↓</span><span>材料按新购成本</span></div>
+      </div>
+      <div class="er-scroll" id="er-craft" role="region" aria-label="藏身处制作列表，可独立上下滚动"></div>
+    </section>
   </main>
-  <footer class="es-footer"><span id="es-status" aria-live="polite">PVE · 演示数据</span><span>清单固定 · 变化单独提醒 · 不自动切屏</span></footer>
+  <footer class="er-footer">
+    <details><summary class="cursor-interaction">分类与收益口径</summary><div class="er-ruletext">短线：近 24 小时明显抬价，较此前 7 个完整日的价格中位数至少上涨 20%，24 小时涨幅至少 10%，且两个不同有效快照确认；本预览还要求整件额外净到手至少 10,000 ₽。长线：30 日有效数据覆盖至少 80%，至少 80% 的时间达到收益门槛，较差区间仍有收益。兼具两类时以浅红底提示短期溢价。普通波动和历史不足不着色。左列按最佳可用渠道净到手 / 占格排序；倒货扣进货与税费；制作另扣燃料。同一设施的配方互为备选。当前金额、趋势、稳定性均为演示值。</div></details>
+    <span>金额 ₽ · 税费已扣 · 点击条目展开明细</span>
+  </footer>
+  <div id="er-status" class="er-sr" aria-live="polite"></div>
 </div>
 <script>
 (() => {
-  const root=document.getElementById('eft-side');
-  const names={pve:'PVE',regular:'PVP 常规',season:'PVP 赛季'};
-  const goods=[
-    {id:'ledx',name:'LEDX',alias:'ledx',price:900000,fee:85000,slots:1,trader:494700,base:850000,long:true,tag:'长线高值',note:'1 格 · 优先留位置'},
-    {id:'sugar',name:'一包糖',alias:'sugar 糖',price:96000,fee:9000,slots:1,trader:18000,base:60000,long:true,hot:true,tag:'短线 +60%',note:'1 格 · 常备清单里也有短线机会'},
-    {id:'bolt',name:'螺栓',alias:'bolt bolts',price:45000,fee:4500,slots:1,trader:3500,base:42000,long:true,tag:'长线常捡',note:'1 格 · 常规战利品'},
-    {id:'fuel',name:'金属燃料桶',alias:'fuel 油桶',price:240000,fee:21000,slots:6,trader:60000,base:230000,long:true,tag:'长线常捡',note:'6 格 · 按满容量估值'},
-    {id:'filter',name:'滤水器',alias:'water filter 水滤',price:150000,fee:15000,slots:2,trader:20000,base:100000,hot:true,tag:'短线 +50%',note:'2 格 · 当前报价高于平常'}
-  ];
+  const root = document.getElementById('eft-radar');
+  const q = s => root.querySelector(s);
+  const asset = 'https://cdn.jsdelivr.net/gh/fakundo/tarkov-raid-items@970988a8e0ce3dd9389e438f4adafbb64a7c78ae/src/assets/items/';
+  const rat = 'https://cdn.jsdelivr.net/gh/RatScanner/EfTIcons@b2ae54d5d63441f1623ecd1c7e8087a516af3881/name/';
+  const dev = 'https://cdn.jsdelivr.net/gh/the-hideout/tarkov-dev@ec44177bd3c21aa2b33938153acd0a96dbd939aa/public/images/';
+  const icons = 'https://cdn.jsdelivr.net/gh/emilanderss0n/tarkynator@2b7ac63aa8af0de2b78dddbc83f1b7b641178630/data/icons/';
+  // Item artwork and recipe structures are sourced; all prices and history below are illustrative.
+  const items = {
+    ledx:{name:'LEDX',full:'LEDX 皮肤透照仪',en:'ledx skin transilluminator',img:asset+'LEDX_SKIN_TRANSILLUMINATOR.png',w:1,h:1,price:900000,fee:85000,base:850000,baseFee:80000,day:880000,trader:494700,stable:true,p25:690000},
+    gpu:{name:'显卡',en:'graphics card xianka',img:asset+'GRAPHICS_CARD.png',w:2,h:1,price:640000,fee:58000,base:610000,baseFee:55000,day:630000,trader:126000,stable:true,p25:250000},
+    moon:{name:'私酿酒',en:'moonshine siniangjiu',img:rat+'item_alcohol_moonshine_loot.png',w:1,h:2,price:450000,fee:42000,base:410000,baseFee:38000,day:442000,trader:126000,stable:true,p25:150000},
+    sugar:{name:'白糖',en:'pack sugar baitang',img:rat+'item_sugar_loot.png',w:1,h:1,price:96000,fee:9000,base:60000,baseFee:6000,day:65000,trader:18000,stable:true,p25:45000},
+    filter:{name:'净水器滤芯',en:'water filter lvxin',img:icons+'5d1b385e86f774252167b98a-icon.webp',w:1,h:2,price:150000,fee:15000,base:100000,baseFee:10000,day:108000,trader:20000,stable:true,p25:37000},
+    hose:{name:'波纹软管',en:'corrugated hose ruanguan',img:asset+'CORRUGATED_HOSE.png',w:2,h:1,price:105000,fee:10000,base:82000,baseFee:8000,day:85000,trader:10000,stable:false,p25:17000},
+    bolts:{name:'螺栓',en:'bolts luoshuan',img:rat+'item_screw_bolts.png',w:1,h:1,price:45000,fee:4500,base:42000,baseFee:4000,day:43000,trader:3500,stable:true,p25:30000},
+    lcd:{name:'完好液晶屏',en:'working lcd yejingping',img:rat+'item_barter_electr_lcd_clean.png',w:1,h:2,price:88000,fee:9000,base:83000,baseFee:8500,day:86000,trader:14500,stable:true,p25:29000},
+    meds:{name:'医疗用品',en:'pile meds yiliao',img:asset+'PILE_OF_MEDS.png',w:1,h:1,price:33000,fee:3000,base:32000,baseFee:3000,day:33000,trader:6000,stable:true,p25:25000},
+    fuelc:{name:'燃油添加剂',en:'fuel conditioner',img:asset+'FUEL_CONDITIONER.png',w:1,h:2,price:70000,fee:8000,base:68000,baseFee:7800,day:69000,trader:70000,stable:true,p25:32000},
+    wires:{name:'电线',en:'bundle wires dianxian',img:rat+'item_barter_electr_wires.png',w:1,h:1,price:24000,fee:2500,base:23000,baseFee:2400,day:23500,trader:5000,stable:true,p25:20000},
+    salewa:{name:'Salewa 急救包',en:'salewa first aid kit',img:asset+'SALEWA_FIRST_AID_KIT.png',w:1,h:2,price:44000,fee:4000,base:43000,baseFee:3900,day:44000,trader:16000,stable:false,p25:15000},
+    broken:{name:'破损液晶屏',img:rat+'item_barter_electr_lcd_dirt.png',price:22000},
+    croutons:{name:'Emelya 面包干',img:rat+'item_snacks_emelya_loot.png',price:9000},
+    chocolate:{name:'巧克力',img:asset+'ALYONKA.png',price:24000},
+    cord:{name:'电源线',img:asset+'POWERCORD.png',price:28000},
+    capacitors:{name:'电容',img:asset+'CAPACITORS.png',price:10000},
+    components:{name:'电子元件',img:asset+'EL_COMPONENTS.png',price:16000},
+    toolset:{name:'工具套装',img:rat+'item_tools_toolset.png',price:75000},
+    ai2:{name:'AI-2',img:rat+'item_meds_first_aid_box.png',price:9000},
+    bandage:{name:'无菌绷带',img:rat+'item_bandage_med_loot.png',price:6000},
+    augmentin:{name:'奥格门汀',img:rat+'item_augmentin_loot.png',price:20000},
+    silicon:{name:'硅胶管',img:rat+'item_barter_building_silicontube.png',price:35000},
+    tape:{name:'绝缘胶带',img:asset+'INSULATING_TAPE.png',price:9000},
+    water:{name:'纯净水',img:asset+'PURIFIED_WATER.png',price:130000},
+    emergency:{name:'应急饮用水',img:icons+'60098b1705871270cd5352a1-icon.webp',price:18000},
+    lighter:{name:'Crickent 打火机',img:rat+'item_crickent.png',price:3000},
+    matches:{name:'普通火柴',img:rat+'item_matches.png',price:2000}
+  };
+  const lootIds=['ledx','gpu','moon','sugar','filter','hose','bolts','lcd','meds','fuelc','wires','salewa'];
   const flips=[
-    {id:'lcd',name:'正常工作的液晶显示屏',price:88000,fee:9000,cost:44000,base:83000,long:true,tag:'长线观察',note:'机械师 LL2 · 破损液晶屏 ×2 换 1',gate:'每轮上限 10 次；实际库存须在游戏确认'},
-    {id:'direct',name:'商人直购示例',price:160000,fee:18000,cost:100000,base:118000,hot:true,tag:'短线机会',note:'买入后挂跳蚤 · 示例上限 2 次',gate:'此条用于演示直购利润，不代表实际商品'}
+    {id:'f-sugar',item:'sugar',trader:'jaeger',who:'Jaeger',level:2,limit:1,req:[['croutons',5]],stable:true,p25:4000},
+    {id:'f-lcd',item:'lcd',trader:'mechanic',who:'Mechanic',level:2,limit:10,req:[['broken',2]],stable:true,p25:23000},
+    {id:'f-salewa-barter',item:'salewa',trader:'therapist',who:'Therapist',level:1,limit:2,req:[['emergency',1]],stable:false,p25:0},
+    {id:'f-meds',item:'meds',trader:'therapist',who:'Therapist',level:1,limit:4,req:[['lighter',3],['matches',2]],stable:true,p25:10000},
+    {id:'f-salewa-buy',item:'salewa',trader:'therapist',who:'Therapist',level:1,limit:5,buy:37126,req:[],task:'完成 Shortage（短缺）',stable:false,p25:0}
   ];
   const crafts=[
-    {id:'crafta',name:'制作配方示例 A',price:200000,fee:18000,cost:112000,fuel:10000,hours:2,base:190000,long:true,tag:'长线观察',note:'2 小时 / 批',gate:'可复用工具不重复扣费；燃料已分摊'},
-    {id:'craftb',name:'制作配方示例 B',price:320000,fee:35000,cost:180000,fuel:15000,hours:6,base:220000,hot:true,tag:'短线需谨慎',note:'6 小时 / 批',gate:'完工前售价可能回落；应重新计算常态价格下的净利润'}
+    {id:'c-meds',item:'meds',count:3,station:'medstation',stationName:'医疗站',level:2,seconds:2880,fuel:3000,req:[['ai2',1],['bandage',1],['augmentin',1]],stable:true,p25:33000},
+    {id:'c-lcd',item:'lcd',count:1,station:'workbench',stationName:'工作台',level:2,seconds:1887,fuel:2000,req:[['broken',1],['capacitors',1],['components',1]],tools:['toolset'],stable:true,p25:18000},
+    {id:'c-wires',item:'wires',count:8,station:'workbench',stationName:'工作台',level:1,seconds:7100,fuel:7000,req:[['cord',2]],stable:true,p25:69000},
+    {id:'c-sugar',item:'sugar',count:1,station:'nutrition-unit',stationName:'营养部',level:2,seconds:5000,fuel:5000,req:[['chocolate',2]],stable:false,p25:0},
+    {id:'c-moon',item:'moon',count:1,station:'booze-generator',stationName:'酿酒器',level:1,seconds:11000,fuel:11000,req:[['sugar',2],['water',1]],stable:true,p25:28000},
+    {id:'c-hose',item:'hose',count:2,station:'lavatory',stationName:'洗手间',level:1,seconds:12100,fuel:12000,req:[['silicon',1],['wires',3],['tape',3]],stable:false,p25:0}
   ];
-  const all=[...goods,...flips,...crafts];
-  let state={scene:'raid',mode:'pve',search:'',selected:'sugar'};
-  function valid(value){return value&&['raid','stash'].includes(value.scene)&&names[value.mode]&&typeof value.search==='string'}
-  const initial=globalThis.openai?.widgetState?.privateContent;
-  if(valid(initial))state={...state,...initial};
-  const appearance={larger:false};
-  const money=n=>Math.round(n).toLocaleString('zh-CN')+' ₽';
-  function price(item){
-    const scale=state.mode==='pve'?1:state.mode==='regular'?.72:.9;
-    const costScale=state.mode==='pve'?1:state.mode==='regular'?.78:.88;
-    const x={...item,price:Math.round(item.price*scale),fee:Math.round(item.fee*scale),cost:Math.round((item.cost||0)*costScale),fuel:item.fuel||0,base:Math.round(item.base*scale)};
-    x.net=Math.max(x.price-x.fee,x.trader||0);x.profit=x.price-x.fee-x.cost-x.fuel;
-    return x;
+  const markets={pve:{label:'PVE',price:1,cost:1},regular:{label:'PVP 常规',price:.72,cost:.8},season:{label:'PVP 赛季',price:.9,cost:.9}};
+  const state={market:'pve',filter:'all',search:'',open:[]};
+  const controls={spacing:11};
+  const fmt=v=>Math.round(v).toLocaleString('zh-CN');
+  const money=v=>'₽'+fmt(v);
+  const signed=v=>(v>=0?'+':'−')+fmt(Math.abs(v));
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const price=i=>Math.round(i.price*markets[state.market].price);
+  const fee=i=>Math.round(i.fee*markets[state.market].price);
+  const net=i=>price(i)-fee(i);
+  const baseNet=i=>Math.round((i.base-i.baseFee)*markets[state.market].price);
+  const trader=i=>Math.round(i.trader*markets[state.market].cost);
+  const ingredientCost=id=>Math.round(items[id].price*markets[state.market].cost);
+  const cost=r=>r.buy?Math.round(r.buy*markets[state.market].cost):r.req.reduce((a,[id,n])=>a+ingredientCost(id)*n,0);
+  const fuel=r=>Math.round((r.fuel||0)*markets[state.market].cost);
+  const profit=r=>net(items[r.item])*(r.count||1)-cost(r)-fuel(r);
+  const baseProfit=r=>baseNet(items[r.item])*(r.count||1)-cost(r)-fuel(r);
+  const short=i=>(i.price/i.base-1)>=.2&&(i.price/i.day-1)>=.1&&net(i)-baseNet(i)>=10000;
+  // Demo history summaries represent 30 complete days, 94% coverage and two fresh confirmations.
+  const long=(i,r)=>r?Boolean(r.stable&&r.p25*markets[state.market].cost>=1000&&profit(r)>0):Boolean(i.stable&&i.p25*markets[state.market].price>=20000);
+  const badges=(i,r)=>`<div class="er-badges">${short(i)?'<span class="er-badge er-hot">短线</span>':''}${long(i,r)?'<span class="er-badge">长线</span>':''}${!short(i)&&!long(i,r)?'<span class="er-meta">观察中</span>':''}</div>`;
+  const kind=(i,r)=>short(i)?'er-short':long(i,r)?'er-long':'';
+  const accept=(i,r)=>state.filter==='all'||(state.filter==='short'?short(i):long(i,r));
+  const match=(i,r)=>!state.search||[i.name,i.full||'',i.en||'',r?.who||'',r?.stationName||'',...(r?.req||[]).map(([id])=>items[id].name)].join(' ').toLowerCase().includes(state.search.trim().toLowerCase());
+  const picture=(i,rank)=>`<div class="er-picture"><img src="${i.img}" alt="${esc(i.name)}" decoding="async">${rank?`<span class="er-rank">${String(rank).padStart(2,'0')}</span>`:''}</div>`;
+  const metric=(label,value)=>`<div class="er-metric"><span>${label}</span><b>${value}</b></div>`;
+  const trend=i=>short(i)?`<span class="er-surge">7日常态 ${fmt(i.base*markets[state.market].price)} → +${Math.round((i.price/i.base-1)*100)}%</span>`:`<span>7日常态 ${fmt(i.base*markets[state.market].price)} · ${signed((i.price/i.base-1)*100)}%</span>`;
+  const ingredients=r=>r.req.map(([id,n])=>`<span class="er-ingredient">${items[id].img?`<img src="${items[id].img}" alt="" decoding="async">`:''}<span>${esc(items[id].name)} ×${n}</span></span>`).join('');
+  const duration=s=>`${Math.floor(s/3600)?Math.floor(s/3600)+'时':''}${Math.round(s%3600/60)}分`;
+  const dl=rows=>`<dl>${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  function history(i,r){
+    const lines=[];
+    if(short(i))lines.push(`短线依据：较 7 日常态 +${Math.round((i.price/i.base-1)*100)}%，近 24 小时 +${Math.round((i.price/i.day-1)*100)}%；两个有效快照确认。`);
+    if(long(i,r))lines.push(r?`长线依据：30 日正利润占比 90%，下四分位净利 ${money(r.p25*markets[state.market].cost)} / 次。`:`长线依据：30 日内 90% 的时间单格净值高于 20,000；下四分位 ${money(i.p25*markets[state.market].price)} / 格。`);
+    if(!short(i)&&!long(i,r))lines.push('当前未达到长线稳定收益条件，也没有短期价格飙升。');
+    return lines.join('<br>');
   }
-  function matches(x){return (x.name+' '+(x.alias||'')).toLowerCase().includes(state.search.toLowerCase())}
-  function badge(x){return `<span class="es-badge ${x.hot?'es-hot':''}">${x.tag}</span>`}
-  function rows(items,kind){
-    const shown=items.filter(matches);
-    return shown.map(item=>{
-      const x=price(item),amount=kind==='loot'?x.net/x.slots:kind==='craft'?x.profit/x.hours:kind==='flip'?x.profit:x.net;
-      const desc=kind==='sell'?`平常报价 ${money(x.base)} · 现在报价 ${money(x.price)}`:kind==='craft'?`${x.hours} 小时 / 批 · 每批净利润 ${money(x.profit)}`:x.note;
-      return `<div class="es-row ${state.selected===x.id?'es-picked':''}"><div><div class="es-item">${x.name}${badge(x)}</div><div class="es-note">${desc}</div></div><div><button type="button" class="es-action cursor-interaction" data-item="${x.id}" aria-label="查看${x.name}收益明细"><span class="es-amount">${money(amount)}</span></button><div class="es-side">${kind==='sell'?'预计净到手':kind==='loot'?'净到手 / 格':kind==='craft'?'净利润 / 小时':'净利润 / 次'}</div></div></div>`;
-    }).join('')||'<div class="es-empty">未匹配演示物品</div>';
+  function lootEntry(id,rank){
+    const i=items[id],tr=trader(i),best=Math.max(net(i),tr),channel=tr>net(i)?'商人净到手':'跳蚤净到手';
+    return `<details class="er-entry ${kind(i)}" data-key="${id}" data-slot-value="${best/(i.w*i.h)}">
+      <summary class="cursor-interaction" aria-label="查看${esc(i.name)}明细">
+        <div class="er-itemtop">${picture(i,rank)}<div><div class="er-name">${esc(i.name)}</div>${badges(i)}</div><div class="er-valueblock"><div class="er-mainvalue er-value">${fmt(best/(i.w*i.h))}</div><div class="er-meta">净到手 / 格</div></div></div>
+        <div class="er-metrics er-three">${metric('跳蚤挂价',fmt(price(i)))}${metric(channel,fmt(best))}${metric(`${i.w} × ${i.h}`,i.w*i.h+' 格')}</div>
+        <div class="er-tail">${trend(i)}<span class="er-expand" aria-hidden="true">⌄</span></div>
+      </summary>
+      <div class="er-detail">${dl([['跳蚤挂价',money(price(i))],['上架费',`−${money(fee(i))}`],['跳蚤净到手',money(net(i))],['商人回收',money(tr)],['最佳渠道每格净到手',money(best/(i.w*i.h))]])}<div class="er-rule">${history(i)}${id==='salewa'?'<br>按满耐久 400 / 400 估值。':''}${id==='ledx'?'<br>该物品的跳蚤等级门槛需单独检查。':''}</div></div>
+    </details>`;
+  }
+  function routeEntry(r,isCraft){
+    const i=items[r.item],p=profit(r),pc=cost(r),n=r.count||1,primary=isCraft?p/(r.seconds/3600):p;
+    const route=isCraft
+      ?`<img class="er-avatar" src="${dev}stations/${r.station}-icon.png" alt=""><span>${r.stationName} Lv.${r.level}</span><span class="er-limit">${duration(r.seconds)}</span>`
+      :`<img class="er-avatar" src="${dev}traders/${r.trader}-icon.jpg" alt=""><span>${r.who} LL${r.level} · ${r.buy?'直购':'兑换'}</span><span class="er-limit">每轮限 ${r.limit}</span>`;
+    const metrics=isCraft
+      ?metric('材料投入',fmt(pc))+metric('每批净利润',signed(p))+metric(`挂价 ×${n}`,fmt(price(i)*n))
+      :metric('进货投入',fmt(pc))+metric('跳蚤挂价',fmt(price(i)))+metric('回报率',Math.round(p/pc*100)+'%');
+    const parts=r.req.map(([id,count])=>[`${esc(items[id].name)} ×${count}`,money(ingredientCost(id)*count)]);
+    const detailRows=[...parts,...(r.buy?[['商人购买价',money(pc)]]:[]),['挂牌收入'+(n>1?' ×'+n:''),money(price(i)*n)],['上架费合计','−'+money(fee(i)*n)],...(isCraft?[['燃料分摊','−'+money(fuel(r))],['基础制作耗时',Math.floor(r.seconds/60)+'分'+r.seconds%60+'秒']]:[]),['净利润 / '+(isCraft?'批':'次'),money(p)],['按常态售价的净利润',money(baseProfit(r))],...(!isCraft?[['本轮理论利润上限',money(p*r.limit)+'（库存未知）']]:[])];
+    return `<details class="er-entry ${kind(i,r)}" data-key="${r.id}">
+      <summary class="cursor-interaction" aria-label="查看${esc(i.name)}${isCraft?'制作':r.buy?'直购':'兑换'}明细">
+        <div class="er-itemtop">${picture(i)}<div><div class="er-name">${esc(i.name)}</div>${badges(i,r)}</div><div class="er-valueblock"><div class="er-mainvalue er-value">${signed(primary)}</div><div class="er-meta">净利润 / ${isCraft?'小时':'次'}</div></div></div>
+        <div class="er-route">${route}</div>
+        ${r.req.length?`<div class="er-ingredients">${ingredients(r)}</div>`:''}
+        <div class="er-metrics er-three">${metrics}</div>
+        <div class="er-tail">${short(i)?`<span class="er-surge">售价 +${Math.round((i.price/i.base-1)*100)}% · 常态净利 ${signed(baseProfit(r))}</span>`:`<span>${r.task?esc(r.task):'常态净利 '+signed(baseProfit(r))}</span>`}<span class="er-expand" aria-hidden="true">⌄</span></div>
+      </summary>
+      <div class="er-detail">${dl(detailRows)}<div class="er-rule">${history(i,r)}${r.tools?'<br>需持有工具：'+r.tools.map(id=>items[id].name+'（'+money(ingredientCost(id))+'）').join('、')+'，工具不消耗，未重复计入每批成本。':''}${isCraft&&short(i)?'<br>常态净利用当前材料成本和常态卖价计算，供比较完工后溢价回落的影响。':''}</div></div>
+    </details>`;
+  }
+  function save(){
+    state.open=[...root.querySelectorAll('.er-entry[open]')].map(el=>el.dataset.key);
+    if(globalThis.openai?.setWidgetState)globalThis.openai.setWidgetState({
+      modelContent:{layout:'三列独立滚动',market:markets[state.market].label,filter:state.filter,leftSort:'单格净到手倒序',shortDefinition:'短期价格飙升',search:state.search},
+      privateContent:{version:3,...state}
+    }).catch(()=>{});
   }
   function render(){
-    root.style.setProperty('--es-size',appearance.larger?'18px':'16px');
-    root.style.setProperty('--es-name-size',appearance.larger?'20px':'17px');
-    root.style.setProperty('--es-amount-size',appearance.larger?'28px':'23px');
-    const eligible=(state.scene==='raid'?goods:[...flips,...crafts,...goods.filter(x=>x.hot)]).filter(matches);
-    if(!eligible.some(x=>x.id===state.selected))state.selected=eligible[0]?.id||null;
-    root.querySelector('#es-mode').value=state.mode;
-    root.querySelector('#es-search').value=state.search;
-    root.querySelectorAll('[data-scene]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.scene===state.scene)));
-    root.querySelector('#es-raid').hidden=state.scene!=='raid';
-    root.querySelector('#es-stash').hidden=state.scene!=='stash';
-    root.querySelector('#es-loot').innerHTML=rows(goods.filter(x=>x.long),'loot');
-    root.querySelector('#es-selling').innerHTML=rows(goods.filter(x=>x.hot),'sell');
-    root.querySelector('#es-flips').innerHTML=rows(flips,'flip');
-    root.querySelector('#es-crafts').innerHTML=rows(crafts,'craft');
-    root.querySelector('#es-strip').innerHTML='<span class="es-small">库存出货关注</span>'+goods.filter(x=>x.hot&&matches(x)).map(x=>`<button type="button" class="cursor-interaction" data-item="${x.id}">${x.name} · ${x.tag}</button>`).join('');
-    const selected=all.find(x=>x.id===state.selected);
-    const detail=root.querySelector('#es-detail');
-    if(selected){
-      const x=price(selected),business=x.cost>0;
-      detail.innerHTML=`<strong>${x.name}</strong><span class="es-calculation">售价 ${money(x.price)} − 手续费 ${money(x.fee)}${business?' − 成本 '+money(x.cost):''}${x.fuel?' − 燃料 '+money(x.fuel):''}</span><span class="es-result">${business?'预计净利润 ':'预计净到手 '}${money(business?x.profit:x.net)}</span><div class="es-rule">${x.gate||'示例按一次上架成功计算；实际卖出前需确认物品状态与最新报价'} · 金额为演示值</div>`;
-    } else detail.innerHTML='<span class="es-small">点击金额查看收益明细</span>';
-    root.querySelector('#es-status').textContent=`${names[state.mode]} · ${state.scene==='raid'?'局内速看':'局外经营'} · 演示数据`;
+    q('#er-market').value=state.market;q('#er-search').value=state.search;
+    root.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===state.filter)));
+    const left=lootIds.filter(id=>accept(items[id])&&match(items[id])).sort((a,b)=>Math.max(net(items[b]),trader(items[b]))/(items[b].w*items[b].h)-Math.max(net(items[a]),trader(items[a]))/(items[a].w*items[a].h));
+    const middle=flips.filter(r=>profit(r)>0&&accept(items[r.item],r)&&match(items[r.item],r)).sort((a,b)=>profit(b)-profit(a));
+    const right=crafts.filter(r=>profit(r)>0&&accept(items[r.item],r)&&match(items[r.item],r)).sort((a,b)=>profit(b)/b.seconds-profit(a)/a.seconds);
+    const lists=[['loot',left,left.map((id,index)=>lootEntry(id,index+1))],['flip',middle,middle.map(r=>routeEntry(r,false))],['craft',right,right.map(r=>routeEntry(r,true))]];
+    lists.forEach(([name,entries,html])=>{
+      q('#er-'+name).innerHTML=html.join('')||'<div class="er-empty">没有匹配的机会</div>';
+      q('#er-'+name+'-count').textContent=entries.length+' 项';
+    });
+    root.querySelectorAll('.er-entry').forEach(el=>{
+      if(state.open.includes(el.dataset.key))el.open=true;
+    });
+    q('#er-status').textContent=`${markets[state.market].label}，拾取 ${left.length} 项，倒货 ${middle.length} 项，制作 ${right.length} 项。`;
   }
-  function save(){if(globalThis.openai?.setWidgetState)globalThis.openai.setWidgetState({modelContent:{prototype:true,scenario:state.scene,market:names[state.mode],selected:state.selected},privateContent:state}).catch(()=>{})}
-  root.addEventListener('click',e=>{
-    const b=e.target.closest('button');if(!b)return;
-    if(b.dataset.scene){state.scene=b.dataset.scene;state.search='';state.selected=state.scene==='raid'?'sugar':'lcd'}
-    else if(b.dataset.item)state.selected=b.dataset.item;
-    else return;
-    render();save();
+  function restore(snapshot){
+    const v=snapshot?.privateContent;
+    if(v?.version!==3)return;
+    if(markets[v.market])state.market=v.market;
+    if(['all','long','short'].includes(v.filter))state.filter=v.filter;
+    state.search=typeof v.search==='string'?v.search:'';
+    state.open=Array.isArray(v.open)?v.open.filter(s=>typeof s==='string'):[];
+  }
+  restore(globalThis.openai?.widgetState);render();
+  root.addEventListener('click',e=>{if(e.target.closest('.er-entry > summary'))requestAnimationFrame(save);});
+  q('#er-market').addEventListener('change',e=>{state.market=e.target.value;state.open=[];render();save();});
+  q('#er-search').addEventListener('input',e=>{state.search=e.target.value;render();save();});
+  root.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{state.filter=b.dataset.filter;render();save();}));
+  window.addEventListener('openai:set_globals',e=>{
+    if(e.detail?.globals?.widgetState){
+      const before=JSON.stringify(state);restore(e.detail.globals.widgetState);
+      if(JSON.stringify(state)!==before)render();
+    }
   });
-  root.querySelector('#es-mode').addEventListener('change',e=>{state.mode=e.target.value;render();save()});
-  root.querySelector('#es-search').addEventListener('input',e=>{state.search=e.target.value;render();save()});
-  globalThis.addEventListener('openai:set_globals',e=>{const next=e.detail?.globals?.widgetState?.privateContent;if(valid(next)){state={...state,...next};render()}});
-  render();
-  if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:render});tweak.addToggle(appearance,'larger',{label:'放大正文'})}
+  if(globalThis.Tweak){
+    const tweak=new Tweak({container:root,onChange:()=>root.style.setProperty('--er-space',controls.spacing+'px')});
+    tweak.addSlider(controls,'spacing',{label:'列表留白',min:8,max:16,unit:'px'});
+  }
 })();
 </script>
