@@ -1,7 +1,7 @@
 // A bounded packing layout: new quotes keep surviving items in their seats.
 export function quicklookLayout(items, {width, height, compact = false, spotlight = true, previous = null} = {}) {
-  const columns = Math.max(2, Math.min(spotlight?12:16, Math.floor(((width || 640) + 10) / (spotlight?(compact?128:146):(compact?104:120)))));
-  const rows = Math.max(2, Math.min(spotlight?6:8, Math.floor(((height || 420) + 10) / (spotlight?(compact?122:136):(compact?110:126)))));
+  const columns = Math.max(1, Math.min(spotlight?12:16, Math.floor(((width || 640) + 10) / (spotlight?(compact?128:146):(compact?104:120)))));
+  const rows = Math.max(1, Math.min(spotlight?6:8, Math.floor(((height || 420) + 10) / (spotlight?(compact?122:136):(compact?96:126)))));
   const ranked = [...new Map(items.filter(r => Number.isFinite(r.slotValue) && r.slotValue > 0).map(r => [r.id,r])).values()]
     .sort((a,b) => b.slotValue-a.slotValue || a.id.localeCompare(b.id));
   const capacity = columns * rows;
@@ -38,9 +38,15 @@ export function quicklookLayout(items, {width, height, compact = false, spotligh
   return {columns,rows,cells};
 }
 
-export function inQuicklookBand(value, band) {
-  if(!Number.isFinite(value)||value<=0)return false;
-  return band==='everyday'?value>=30000&&value<100000:band==='high'?value>=100000:true;
+export function partitionQuicklook(items, {includeLower = false} = {}) {
+  const everyday=[],high=[];
+  for(const item of items){
+    const value=item.slotValue;
+    if(!Number.isFinite(value)||value<=0)continue;
+    if(value>=100000)high.push(item);
+    else if(includeLower||value>=30000)everyday.push(item);
+  }
+  return {everyday,high};
 }
 
 export function opportunityTone(row, signal = {}) {

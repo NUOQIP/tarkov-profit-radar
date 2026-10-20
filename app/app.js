@@ -1,6 +1,6 @@
 import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,profitStability,scenario,isShortOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
-import { quicklookLayout,opportunityTone,inQuicklookBand } from '/quicklook.js';
+import { quicklookLayout,opportunityTone,partitionQuicklook } from '/quicklook.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
 const UI_REVISION=6;
@@ -46,7 +46,7 @@ function safeView(v={}){
   return {category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',filter:['short','favorites'].includes(v.filter)?v.filter:'all',
     search:typeof v.search==='string'?v.search.slice(0,200):'',
     includeEvents:v.includeEvents===true,
-    lootScope:v.lootScope==='scavenging'?'scavenging':'all',quicklookView:v.quicklookView==='list'?'list':'cloud',quicklookBand:['everyday','high','all'].includes(v.quicklookBand)?v.quicklookBand:'everyday',station:typeof v.station==='string'?v.station:'all',
+    lootScope:v.lootScope==='scavenging'?'scavenging':'all',quicklookView:v.quicklookView==='list'?'list':'cloud',station:typeof v.station==='string'?v.station:'all',
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
 }
 function safeCatalogView(v={}){
@@ -145,9 +145,7 @@ function syncQuicklook(){
   $('#quicklook-controls').hidden=!active;
   $$('[data-quicklook-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quicklookView===view().quicklookView)));
   $('#quicklook-repack').hidden=!cloud;
-  $('#quicklook-bands').hidden=!cloud;$('#quicklook-categories').hidden=cloud;
-  document.body.dataset.quicklookBand=view().quicklookBand;
-  $$('[data-quicklook-band]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quicklookBand===view().quicklookBand)));
+
   $('#loot').classList.toggle('quicklook-view',cloud);
   $('#loot').setAttribute('aria-label',cloud?'跑刀速览物品图标云':'拾取与出售排行');
   if(state.page==='loot'){
@@ -207,7 +205,7 @@ function renderCatalog(preserve=false){
 function matches(row){
   const v=view(),c=criteria(),i=row.item;
   if(row.kind==='loot'&&v.lootScope==='scavenging'&&!isScavengingItem(i))return false;
-  if(row.kind==='loot'&&inCloud()&&!inQuicklookBand(row.slotValue,v.quicklookBand))return false;
+  if(row.kind==='loot'&&inCloud()&&(!Number.isFinite(row.slotValue)||row.slotValue<=0||(!v.search.trim()&&v.filter!=='favorites'&&row.slotValue<30000)))return false;
   if(row.kind==='craft'&&v.station!=='all'&&row.station?.id!==v.station)return false;
   if(v.category!=='all'&&v.category!==i.category)return false;
   if(v.filter==='favorites'&&!state.favorites[state.market].includes(i.id))return false;
@@ -250,29 +248,42 @@ function quicklookTile(r,cell,index){
 }
 function renderQuicklook(){
   const root=$('#loot');
-  if(!root.querySelector('.quicklook-board'))root.innerHTML='<div class="quicklook-board"><div class="quicklook-grid"></div></div><div class="quicklook-foot"><span id="quicklook-coverage"></span><button data-quicklook-view="list">查看完整列表 '+icon('chevron')+'</button></div>';
-  const board=root.querySelector('.quicklook-board'),grid=board.querySelector('.quicklook-grid');
+  if(!root.querySelector('.quicklook-split'))root.innerHTML=`<div class="quicklook-board quicklook-split">
+    <section class="quicklook-zone quicklook-everyday" aria-label="杂物优先"><header><h2>杂物优先 <span id="quicklook-everyday-range">3–10万 / 格</span></h2><span id="quicklook-everyday-count"></span></header><div class="quicklook-stage"><div class="quicklook-grid" data-cloud-zone="everyday"></div><span class="cloud-zone-empty" hidden>暂无匹配物品</span></div></section>
+    <section class="quicklook-zone quicklook-high" aria-label="高价留意"><header><h2>高价留意 <span>10万以上 / 格</span></h2><span id="quicklook-high-count"></span></header><div class="quicklook-stage"><div class="quicklook-grid" data-cloud-zone="high"></div><span class="cloud-zone-empty" hidden>暂无匹配物品</span></div></section>
+    </div><div class="quicklook-foot"><span id="quicklook-coverage"></span><button data-quicklook-view="list">查看完整列表 ${icon('chevron')}</button></div>`;
   const key=JSON.stringify([state.market,view(),state.density]);
   const previous=key===quicklookKey?quicklookPlan:null;
-  quicklookPlan=quicklookLayout(visible.loot,{width:board.clientWidth-24,height:board.clientHeight-24,compact:state.density==='compact',spotlight:view().quicklookBand!=='everyday',previous});quicklookKey=key;
-  const byId=new Map(visible.loot.map(r=>[r.id,r]));
-  const focused=grid.contains(document.activeElement)?document.activeElement.dataset.cloudId:null;
-  grid.style.setProperty('--cloud-columns',quicklookPlan.columns);grid.style.setProperty('--cloud-rows',quicklookPlan.rows);
-  const existing=new Map([...grid.children].map(el=>[el.dataset.cloudId,el])),markup=new Map();
-  const tiles=quicklookPlan.cells.map((c,index)=>{
-    const html=quicklookTile(byId.get(c.id),c,index),old=existing.get(c.id);markup.set(c.id,html);
-    if(old&&quicklookMarkup.get(c.id)===html)return old;
-    const template=document.createElement('template');template.innerHTML=html;const fresh=template.content.firstElementChild;
-    if(!old)return fresh;
-    const priorImage=old.querySelector('img'),nextImage=fresh.querySelector('img');
-    if(priorImage&&nextImage&&(priorImage.src===nextImage.src||priorImage.src===nextImage.dataset.fallback))nextImage.replaceWith(priorImage);
-    for(const attribute of ['class','style','title','aria-label'])old.setAttribute(attribute,fresh.getAttribute(attribute));
-    old.replaceChildren(...fresh.childNodes);return old;
-  });
-  grid.replaceChildren(...tiles);quicklookMarkup=markup;
+  const includeLower=!!view().search.trim()||view().filter==='favorites';
+  const groups=partitionQuicklook(visible.loot,{includeLower});
+  const focused=root.contains(document.activeElement)?document.activeElement.dataset.cloudId:null;
+  const existing=new Map([...root.querySelectorAll('[data-cloud-id]')].map(el=>[el.dataset.cloudId,el]));
+  const markup=new Map(),plans={};let shown=0;
+  for(const zone of ['everyday','high']){
+    const grid=root.querySelector(`[data-cloud-zone="${zone}"]`),stage=grid.parentElement;
+    const plan=quicklookLayout(groups[zone],{width:stage.clientWidth-20,height:stage.clientHeight-20,compact:state.density==='compact',spotlight:false,previous:previous?.[zone]});
+    plans[zone]=plan;shown+=plan.cells.length;
+    grid.style.setProperty('--cloud-columns',plan.columns);grid.style.setProperty('--cloud-rows',plan.rows);
+    const byId=new Map(groups[zone].map(r=>[r.id,r]));
+    const tiles=plan.cells.map((c,index)=>{
+      const html=quicklookTile(byId.get(c.id),c,index),old=existing.get(c.id);markup.set(c.id,html);
+      if(old&&quicklookMarkup.get(c.id)===html)return old;
+      const template=document.createElement('template');template.innerHTML=html;const fresh=template.content.firstElementChild;
+      if(!old)return fresh;
+      const priorImage=old.querySelector('img'),nextImage=fresh.querySelector('img');
+      if(priorImage&&nextImage&&(priorImage.src===nextImage.src||priorImage.src===nextImage.dataset.fallback))nextImage.replaceWith(priorImage);
+      for(const attribute of ['class','style','title','aria-label'])old.setAttribute(attribute,fresh.getAttribute(attribute));
+      old.replaceChildren(...fresh.childNodes);return old;
+    });
+    grid.replaceChildren(...tiles);
+    stage.querySelector('.cloud-zone-empty').hidden=groups[zone].length>0;
+    $('#quicklook-'+zone+'-count').textContent=plan.cells.length+' / '+fmt(groups[zone].length);
+  }
+  quicklookPlan=plans;quicklookKey=key;quicklookMarkup=markup;
   quicklookPrices=new Map(visible.loot.map(r=>[r.id,r.slotValue]));
-  if(focused)[...grid.children].find(el=>el.dataset.cloudId===focused)?.focus({preventScroll:true});
-  $('#quicklook-coverage').textContent=`${view().quicklookBand==='everyday'?'3–10万 / 格 · ':view().quicklookBand==='high'?'10万以上 / 格 · ':''}展示 ${quicklookPlan.cells.length} / ${fmt(visible.loot.length)} 项`;
+  if(focused)root.querySelector(`[data-cloud-id="${focused}"]`)?.focus({preventScroll:true});
+  $('#quicklook-everyday-range').textContent=includeLower?'10万以内 / 格':'3–10万 / 格';
+  $('#quicklook-coverage').textContent=`展示 ${shown} / ${fmt(visible.loot.length)} 项`;
 }
 function card(r,index){
   const i=r.item,s=signal(r),loot=r.kind==='loot',craft=r.kind==='craft',fav=state.favorites[state.market].includes(i.id);
@@ -311,9 +322,8 @@ function render(preserve=false){
     let message='尝试放宽分类、预算或解锁条件。',title='暂无符合条件的机会';
     if(view().filter==='favorites'){title='这里还没有收藏';message='点物品右下角的星标，下次就能快速找到。';}
     if(view().filter==='short'){title=signalsLoading?'正在核对短线历史':'尚未确认7日急涨';message='相对约7日前涨价20%以上，并由近期两个报价快照确认。';}
-    if(inCloud()&&view().quicklookBand!=='all'&&view().filter==='all'){title='当前价位没有匹配物品';message='可以查看全部价位，或调整搜索与筛选。';}
     $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p>${key==='loot'&&view().lootScope==='scavenging'?'<button data-loot-scope="all">在全部物品中查找</button>':''}<button data-reset>重置筛选</button></div>`;
-    if(inCloud()&&!visible[key].length&&view().quicklookBand!=='all')$('#'+key+' .empty').insertAdjacentHTML('beforeend','<button data-quicklook-band="all">查看全部价位</button>');
+    if(inCloud()&&!visible[key].length)$('#'+key+' .empty').insertAdjacentHTML('beforeend','<button data-quicklook-view="list">查看完整列表</button>');
     if(visible[key].length>limit[key])$('#'+key).insertAdjacentHTML('beforeend',`<button class="load-more" data-more="${key}">继续查看 ${Math.min(40,visible[key].length-limit[key])} 项 ${icon('arrow-down')}</button>`);
     if(savedAnchors){const a=savedAnchors[key],el=$('#'+key),target=[...el.querySelectorAll('.card')].find(c=>c.dataset.row===a.id);el.scrollTop=a.top;if(target)el.scrollTop+=target.getBoundingClientRect().top-el.getBoundingClientRect().top-a.offset;}
     else $('#'+key).scrollTop=0;
@@ -561,7 +571,6 @@ document.addEventListener('click',event=>{
   if(target.hasAttribute('data-retry'))refresh(true);
   if(target.dataset.days){chartDays=Number(target.dataset.days);$$('[data-days]').forEach(b=>b.classList.toggle('active',Number(b.dataset.days)===chartDays));historyDetail();}
   if(target.dataset.quicklookView){view().quicklookView=target.dataset.quicklookView;animateNext=true;render();persist();}
-  if(target.dataset.quicklookBand){view().quicklookBand=target.dataset.quicklookBand;animateNext=true;render();persist();}
   if(target.id==='quicklook-repack'){quicklookPlan=null;animateNext=true;render(true);}
   if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;animateNext=true;render();persist();}
   if(target.hasAttribute('data-price')&&Number(target.dataset.price)>0){$('#target-price').value=target.dataset.price;updateScenario();}

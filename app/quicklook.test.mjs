@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {quicklookLayout,opportunityTone,inQuicklookBand} from './quicklook.mjs';
+import {quicklookLayout,opportunityTone,partitionQuicklook} from './quicklook.mjs';
 const items=Array.from({length:100},(_,i)=>({id:String(i).padStart(3,'0'),slotValue:100000-i*800}));
 function valid(plan) {
   const cells=new Set(),ids=new Set();
@@ -36,19 +36,19 @@ test('price updates keep unchanged tiers in place and promote newly valuable ite
 test('cloud excludes unknown and nonpositive values and handles empty results',()=>{
   assert.deepEqual(quicklookLayout([{id:'missing',slotValue:null},{id:'zero',slotValue:0},{id:'bad',slotValue:NaN}]).cells,[]);
 });
-test('the everyday band contains 30000 through 99999 and makes more room for overlooked loot',()=>{
-  assert.equal(inQuicklookBand(30000,'everyday'),true);
-  assert.equal(inQuicklookBand(55000,'everyday'),true);
-  assert.equal(inQuicklookBand(29999,'everyday'),false);
-  assert.equal(inQuicklookBand(100000,'everyday'),false);
-  assert.equal(inQuicklookBand(100000,'high'),true);
-  assert.equal(inQuicklookBand(null,'all'),false);
-  const size={width:1120,height:440,compact:true};
-  const focused=quicklookLayout(items,{...size,spotlight:false});valid(focused);
-  assert.ok(focused.cells.length>=30);
-  assert.ok(focused.cells.length>quicklookLayout(items,size).cells.length);
-  const mobile=quicklookLayout(items,{width:340,height:460,compact:true,spotlight:false});valid(mobile);
-  assert.ok(mobile.cells.length>=12);
+test('both price ranges stay visible together without overlaps or boundary gaps',()=>{
+  const values=[null,NaN,0,29999,30000,55000,99999,100000,350000];
+  const sample=values.map((slotValue,i)=>({id:String(i),slotValue}));
+  const groups=partitionQuicklook(sample);
+  assert.deepEqual(groups.everyday.map(r=>r.slotValue),[30000,55000,99999]);
+  assert.deepEqual(groups.high.map(r=>r.slotValue),[100000,350000]);
+  assert.equal(new Set([...groups.everyday,...groups.high].map(r=>r.id)).size,5);
+  assert.deepEqual(partitionQuicklook(sample,{includeLower:true}).everyday.map(r=>r.slotValue),[29999,30000,55000,99999]);
+  for(const width of [100,230,330,800,1250])for(const height of [100,300,600]) {
+    const plan=quicklookLayout(items,{width,height,compact:true,spotlight:false});valid(plan);
+    assert.ok(plan.cells.length>0);
+    assert.ok(plan.cells.every(c=>c.w===1&&c.h===1));
+  }
 });
 test('loss color wins over any stale signal; profitable long and short use distinct tones',()=>{
   assert.equal(opportunityTone({kind:'flip',profit:-1},{short:true,long:true}),'loss');
