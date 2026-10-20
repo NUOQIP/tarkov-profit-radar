@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, hasFullProgress, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -14,6 +14,42 @@ test('fee uses supplied market parameters, count and explicit intelligence setti
   assert.equal(fleaFee(100000,100000,flea,0,0,60),600000);
   assert.equal(fleaFee(100000,100000,flea,3,0),7000);
   assert.equal(fleaFee(0,100000,flea),null);
+});
+
+test('upstream wearable melee objects have their own weapon category',()=>{
+  assert.equal(categoryOf({types:['wearable'],properties:{propertiesType:'ItemPropertiesMelee'}}),'melee');
+  assert.equal(categoryOf({types:['wearable','backpack'],properties:{}}),'gear');
+});
+
+test('preset flips use the base weapon quote and preset acquisition cost without attachment revenue',()=>{
+  const gun=item('gun'),attachment=item('scope',{price:9000000,average:9000000});
+  const preset=item('preset',{category:'weapon',isPreset:true,default:false,baseItem:'gun',price:null,average:null,scan:null,containsItems:[{item:'gun',count:1},{item:'scope',count:1}],buy:[{trader:'t',priceRUB:20000,currency:'RUB'}]});
+  const data=dataset([gun,preset,attachment]);
+  const [row]=collectFlips(data,{},now);
+  assert.equal(row.item.id,'preset');assert.equal(row.item.valuationId,'gun');assert.equal(row.purchase,20000);
+  assert.equal(row.fleaNet,90000);assert.equal(row.profit,70000);assert.equal(row.item.price,100000);
+  assert.equal(scenario(row,data,{},120000).profit,scenario({...row,item:gun},data,{},120000).profit);
+  assert.equal(collectFlips(dataset([{...gun,types:['noFlea']},preset,attachment]),{},now).length,0);
+  const armor={...preset,category:'armor',price:200000,average:200000,scan:gun.scan};
+  const [armorRow]=collectFlips(dataset([gun,armor]),{},now);
+  assert.equal(armorRow.item.price,200000);assert.equal(armorRow.item.valuationId,undefined);
+});
+
+test('all offers retains unknown-price and unknown-cost routes without inventing profits',()=>{
+  const output=item('out',{price:null,buy:[{trader:'t',priceRUB:20000,currency:'RUB'}]});
+  const data=dataset([output],{barters:[{id:'missing',trader:'t',offeredItem:{item:'out',count:1},requiredItems:[{item:'missing',count:1}]}]});
+  assert.equal(collectFlips(data,{},now).length,0);
+  const all=collectFlips(data,{includeUnavailable:true,includeLosses:true},now);
+  assert.equal(all.length,2);assert.ok(all.every(r=>r.profit===null));
+  const barter=all.find(r=>r.isBarter);assert.equal(barter.purchase,null);assert.equal(barter.execution.executable,false);
+});
+
+test('simplified settings fix player and facility levels while retaining trader, task and production choices',()=>{
+  const data=dataset([],{traders:{t:{id:'t',slug:'mechanic',levels:[{level:4}]},npc:{id:'npc',slug:'lightkeeper',levels:[{level:1}]}},stations:{s:{id:'s',slug:'workbench',maxLevel:3},wall:{id:'wall',slug:'defective-wall',maxLevel:6}},crafts:[{station:'s',duration:60}]});
+  const p=resolveTradingProfile({maxProgress:false,progressConfigured:true,playerLevel:5,stationLevels:{s:1},traderLevels:{t:2},completedTasks:[],management:20,materialMode:'owned',edition:'unheard_edition',excludedStations:['s']},data);
+  assert.equal(p.playerLevel,79);assert.equal(p.stationLevels.s,3);assert.equal(p.intelligence,3);assert.equal(p.materialMode,'buy');assert.equal(p.edition,'');
+  assert.equal(p.traderLevels.t,2);assert.equal(p.management,20);assert.deepEqual(p.excludedStations,['s']);
+  assert.deepEqual(tradingTraders(data).map(t=>t.id),['t']);assert.deepEqual(productionStations(data).map(s=>s.id),['s']);
 });
 test('normalization preserves every equipment category and resolves actual translations',()=>{
   const raw = [

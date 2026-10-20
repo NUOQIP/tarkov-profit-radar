@@ -1,6 +1,6 @@
 export const MARKETS = { pve: 'PVE', regular: 'PVP 常规', 'pvp-season': 'PVP 赛季' };
 export const CATEGORIES = {
-  weapon: '武器', mods: '武器配件', armor: '护甲 / 头盔', ammo: '弹药 / 投掷物',
+  weapon: '武器', melee: '近战武器', mods: '武器配件', armor: '护甲 / 头盔', ammo: '弹药 / 投掷物',
   keys: '钥匙 / 门卡', medical: '医疗 / 针剂', food: '食物 / 饮料',
   barter: '交换品', gear: '背包 / 装备', containers: '容器', other: '其他'
 };
@@ -18,7 +18,10 @@ export const EVENT_IDS = new Set([
 const CURRENCY_IDS = new Set(['5449016a4bdc2d6f028b456f', '5696686a4bdc2da3298b456a', '569668774bdc2da2298b4568', '5d235b4d86f7742e017bc88a']);
 const positive = n => Number.isFinite(n) && n > 0;
 const values = x => Array.isArray(x) ? x : Object.values(x || {});
-export const MODEL_VERSION = '2026-10-21-v3';
+export const MODEL_VERSION = '2026-10-21-v4';
+export const TRADING_NAMES={prapor:'Prapor',therapist:'Therapist',fence:'Fence',skier:'Skier',peacekeeper:'Peacekeeper',mechanic:'Mechanic',ragman:'Ragman',jaeger:'Jaeger',ref:'Ref'};
+export const tradingTraders=data=>values(data.traders).filter(t=>Object.hasOwn(TRADING_NAMES,t.slug));
+export const productionStations=data=>values(data.stations).filter(s=>!['bitcoin-farm','cultist-circle'].includes(s.slug)&&(data.crafts||[]).some(c=>c.station===s.id&&positive(c.duration)));
 export function normalizeProfile(input = {}) {
   if(!input || typeof input!=='object' || Array.isArray(input)) input={};
   const number = (value, min, max, fallback = null) => value === null || value === '' || value === undefined ? fallback : Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Number(value))) : fallback;
@@ -31,6 +34,7 @@ export function normalizeProfile(input = {}) {
     traderLevels:levels(input.traderLevels,4), stationLevels:levels(input.stationLevels,10), stationFuel:levels(input.stationFuel,10000000),
     completedTasks:(Array.isArray(input.completedTasks)?input.completedTasks:[]).filter(x=>/^[0-9a-f]{24}$/.test(x)),
     ownedTools:(Array.isArray(input.ownedTools)?input.ownedTools:[]).filter(x=>/^[0-9a-f]{24}$/.test(x)),
+    excludedStations:(Array.isArray(input.excludedStations)?input.excludedStations:[]).filter(x=>/^[a-z0-9-]{1,64}$/i.test(x)),
     edition:typeof input.edition==='string'?input.edition:'',
     materialMode:input.materialMode==='owned'?'owned':'buy', onlyExecutable:input.onlyExecutable===true, includeEvents:input.includeEvents===true,
     stack:input.stack==='full'?'full':'single'
@@ -64,6 +68,13 @@ export function hasFullProgress(profile,data) {
     values(data.traders).every(t=>(profile.traderLevels?.[t.id]??-1)>=traderMaxLevel(t)) &&
     profileTaskIds(data).every(id=>profile.completedTasks?.includes(id));
 }
+export function resolveTradingProfile(input,data,reset=false) {
+  const p=resolvePlayerProfile(input,data,reset);
+  p.playerLevel=79;p.intelligence=3;p.edition='';p.materialMode='buy';
+  p.stationLevels=Object.fromEntries(values(data.stations).map(s=>[s.id,stationMaxLevel(s,data)]));
+  if(reset)p.excludedStations=[];
+  return p;
+}
 // A browsing scope, not a claim about spawn probability or a particular map.
 export function isScavengingItem(item) {
   if(item.isPreset || item.currencyOnly || item.types?.includes('poster')) return false;
@@ -73,6 +84,7 @@ export function isScavengingItem(item) {
 export function categoryOf(item, items = {}) {
   const basis = item.properties?.baseItem ? items[item.properties.baseItem] || item : item;
   const t = basis.types || [];
+  if(basis.properties?.propertiesType==='ItemPropertiesMelee')return 'melee';
   if (t.includes('gun')) return 'weapon';
   if (t.some(s => ['armor', 'helmet', 'armorPlate'].includes(s))) return 'armor';
   if (t.some(s => ['ammo', 'ammoBox', 'grenade'].includes(s))) return 'ammo';
@@ -104,6 +116,7 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
       fleaLevel: Math.max(raw.fleaMarket.minPlayerLevel || 0, i.minLevelForFlea || 0),
       defaultPreset: prop.defaultPreset, baseItem: prop.baseItem, default: prop.default,
       isPreset: (i.types || []).includes('preset'), uses: prop.uses,
+      containsItems:(i.containsItems||[]).map(c=>({item:c.item,count:c.count})),
       maxDurability: prop.maxDurability, units: prop.units,
       buy: i.buyFromTrader || [], sell: i.sellToTrader || [],
       eventOnly:EVENT_IDS.has(i.id), currencyOnly:CURRENCY_IDS.has(i.id),
@@ -112,8 +125,7 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
   }
   const traders = {};
   for (const t of values(parts.traders.data)) {
-    const traderNames = { prapor:'普拉波', therapist:'治疗师', fence:'围栏', skier:'滑雪者', peacekeeper:'维和', mechanic:'机械师', ragman:'拉格曼', jaeger:'耶格', ref:'裁判', lightkeeper:'灯塔商人' };
-    traders[t.id] = { id: t.id, name: traderNames[t.normalizedName] || t.normalizedName, slug:t.normalizedName, image: t.imageLink, resetTime: t.resetTime, levels:t.levels };
+    traders[t.id] = { id: t.id, name: TRADING_NAMES[t.normalizedName] || t.normalizedName, slug:t.normalizedName, image: t.imageLink, resetTime: t.resetTime, levels:t.levels };
   }
   const names = {
     workbench: '工作台', medstation: '医疗站', lavatory: '洗手间', 'nutrition-unit': '营养部',
@@ -129,7 +141,7 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
     stations[s.id] = { id: s.id, name: names[s.normalizedName] || s.normalizedName, slug: s.normalizedName, image: s.imageLink, maxLevel:Math.max(0,...(s.levels||[]).map(l=>l.level||0)) };
   }
   return {
-    version: 2, profileMetadataVersion:1, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
+    version: 2, profileMetadataVersion:2, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
     rawCount: Object.keys(raw.items).length, flea: raw.fleaMarket, items, traders, stations,
     barters: parts.barters.data, crafts: parts.crafts.data, history: {},
     tasks:parts.tasks?.data || {}, taskNames:parts.tasks_zh?.data || {}
@@ -253,6 +265,7 @@ function materials(reqs, data, options, now) {
 }
 export function executionStatus(row, data, options = {}) {
   const missing = [];
+  if(row.kind==='flip'&&!Number.isFinite(row.profit))missing.push('待估值');
   if(row.status==='报价延迟')missing.push('含延迟报价');
   if (!options.maxProgress && (row.kind==='flip' || row.channel==='跳蚤')) {
     if (!options.playerLevel) missing.push('角色等级未配置');
@@ -270,13 +283,20 @@ export function collectFlips(data, options = {}, now = Date.now()) {
   const rows = [];
   if (data.flea.foundInRaidRequired) return rows;
   const add = (id, item, purchase, trader, level, limit, task, recipe, count = 1, editions = []) => {
+    // The player's valuation rule: price a preset as its underlying weapon only.
+    // Extra attachments never add resale income; acquisition remains the preset offer.
+    if(item.isPreset&&item.category==='weapon'&&data.items[item.baseItem]){
+      const base=data.items[item.baseItem];
+      item={...item,...Object.fromEntries(['basePrice','price','average','low24','high24','offers','scan','updated','fleaLevel'].map(k=>[k,base[k]])),
+        types:[...new Set([...item.types,...base.types])],valuationId:base.id,valuationName:base.name};
+    }
     const tradeOptions={...options,allowDelayed:options.allowDelayedTrades===true};
-    if (isExcluded(item,options) || !['可参考','报价延迟'].includes(quoteStatus(item, data, tradeOptions, now))) return;
-    const s = sale(item, data, tradeOptions, count, now);
-    const profit = s.fleaNet === null ? null : s.fleaNet - purchase;
-    if (!Number.isFinite(profit) || (!options.includeLosses && !positive(profit))) return;
-    const row={ id, kind: 'flip', item, ...s, count, purchase, profit, roi: profit / purchase,
-      trader: data.traders[trader] || { id:trader, name: '未知商人' }, level, limit, task, recipe, editions };
+    if (isExcluded(item,options)) return;
+    const s=sale(item,data,tradeOptions,count,now);
+    const profit=Number.isFinite(s.fleaNet)&&Number.isFinite(purchase)?s.fleaNet-purchase:null;
+    if(!options.includeUnavailable&&(!Number.isFinite(profit)||(!options.includeLosses&&!positive(profit))))return;
+    const row={ id, kind: 'flip', item, ...s, net:s.fleaNet, count, purchase, profit, roi:positive(purchase)&&profit!==null?profit/purchase:null,
+      trader: data.traders[trader] || { id:trader, name: '未知商人' }, level, limit, task, recipe, editions, isBarter:id.startsWith('barter-') };
     row.eventOnly=Boolean(item.eventOnly||recipe?.some(m=>m.item.eventOnly));
     if(recipe?.some(m=>!m.tool&&m.flea&&m.status==='报价延迟'))row.status='报价延迟';
     row.quoteAt=oldestQuote(row);
@@ -293,16 +313,17 @@ export function collectFlips(data, options = {}, now = Date.now()) {
     const item = data.items[b.offeredItem?.item];
     if (!item) continue;
     const recipe = materials(b.requiredItems, data, options, now);
-    if (!recipe) continue;
-    const purchase = recipe.reduce((sum, r) => sum + r.cost, 0);
-    if (positive(purchase)) add('barter-' + b.id, item, purchase, b.trader, b.minTraderLevel, b.buyLimit, b.taskUnlock, recipe, b.offeredItem.count,b.gameEditions || []);
+    if (!recipe && !options.includeUnavailable) continue;
+    const purchase = recipe?recipe.reduce((sum, r) => sum + r.cost, 0):null;
+    if (positive(purchase)||options.includeUnavailable) add('barter-' + b.id, item, purchase, b.trader, b.minTraderLevel, b.buyLimit, b.taskUnlock, recipe, b.offeredItem.count,b.gameEditions || []);
   }
-  return rows.sort((a, b) => b.profit - a.profit);
+  return rows.sort((a,b)=>(b.profit??-Infinity)-(a.profit??-Infinity)||a.id.localeCompare(b.id));
 }
 export function collectCrafts(data, options = {}, now = Date.now()) {
   const rows = [];
   for (const c of data.crafts || []) {
     const item = data.items[c.productItem?.item], station = data.stations[c.station];
+    if(options.excludedStations?.includes(c.station))continue;
     if(['bitcoin-farm','cultist-circle'].includes(station?.slug))continue;
     if (!item || isExcluded(item,options) || !positive(c.duration) || (c.requiredQuestItems || []).length || (station?.slug === 'christmas-tree' && !options.includeEvents)) continue;
     const recipe = materials(c.requiredItems, data, options, now);
