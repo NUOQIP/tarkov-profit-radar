@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#202b28">
-  <meta name="description" content="塔科夫 PVE / PVP 赚钱旁屏。真实物品报价、单格净值、商人倒货和藏身处制作，三列同时掌握。">
-  <title>塔科夫赚钱旁屏 · LOOT RADAR</title>
+  <meta name="description" content="塔科夫赚钱监控：PVE / PVP 物品一览、单格净值、商人倒货和藏身处制作，查看税后收益与真实价格走势。">
+  <title>塔科夫赚钱监控 · LOOT RADAR</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/radar.css">
 </head>
 <body>
 <div class="app-shell">
   <header class="topbar">
-    <a class="brand" href="/" aria-label="塔科夫赚钱旁屏首页">
+    <a class="brand" href="/" aria-label="塔科夫赚钱监控首页">
       <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16"/><circle cx="20" cy="20" r="9"/><path d="M20 4v16l11 11M4 20h5m22 0h5M20 31v5"/><circle class="radar-dot" cx="12" cy="13" r="2"/></svg>
-      <span><strong>塔科夫赚钱旁屏</strong><small>LOOT RADAR <span>／ 物尽其价</span></small></span>
+      <span><strong>塔科夫赚钱监控</strong><small>LOOT RADAR <span>／ 物尽其价</span></small></span>
     </a>
     <nav class="market-tabs" aria-label="市场"><button data-market="pve" aria-pressed="true">PVE</button><button data-market="regular" aria-pressed="false">PVP 常规</button><button data-market="pvp-season" aria-pressed="false">PVP 赛季</button></nav>
     <div class="top-actions">
@@ -26,23 +26,41 @@
     </div>
   </header>
   <div class="overview">
+    <nav class="workspace-nav" aria-label="功能"><button data-page="monitor" aria-pressed="true"><span data-icon="trend"></span>赚钱监控</button><button data-page="items" aria-pressed="false"><span data-icon="box"></span>物品一览</button></nav>
     <div><span class="overview-label">可估值物品</span><strong id="overview-loot">—</strong><span id="catalog-count" class="subtle">全品类覆盖</span></div>
     <div><span class="overview-label">正收益倒货</span><strong id="overview-flips">—</strong><span id="direct-count" class="subtle">直购 + 兑换</span></div>
     <div><span class="overview-label">制作机会</span><strong id="overview-crafts">—</strong><span id="fuel-status" class="subtle">燃料待配置</span></div>
     <div class="overview-source"><span class="live-dot"></span>tarkov.dev 行情<span class="source-divider"></span><button id="method-button">计算口径 <span data-icon="info"></span></button></div>
   </div>
-  <div class="toolbar">
+  <div class="toolbar" id="monitor-toolbar">
     <label class="search"><span data-icon="search"></span><input id="search" type="search" aria-label="搜索物品、材料或设施" placeholder="物品、材料、简称…"><kbd>/</kbd></label>
     <select id="category" aria-label="物品分类"><option value="all">全部分类</option></select>
     <div class="filter-tabs" aria-label="行情类型"><button data-filter="all" aria-pressed="true">全部</button><button data-filter="short" aria-pressed="false"><i class="legend-dot red"></i>短线</button><button data-filter="long" aria-pressed="false"><i class="legend-dot green"></i>长线</button><button data-filter="favorites" aria-pressed="false"><span data-icon="star"></span>收藏<span id="favorite-count"></span></button></div>
     <div class="toolbar-right"><label class="event-toggle"><input id="include-events" type="checkbox"><span>活动限定</span></label><select id="stack" aria-label="堆叠数量"><option value="single">单件 / 单发</option><option value="full">满堆叠</option></select><button id="filter-button" class="filter-button"><span data-icon="filter"></span><span>筛选</span><i id="filter-active" hidden></i></button></div>
   </div>
+  <div class="toolbar catalog-toolbar" id="catalog-toolbar" hidden>
+    <label class="search"><span data-icon="search"></span><input id="catalog-search" type="search" aria-label="搜索物品一览" placeholder="中文、英文、简称或物品 ID…"><kbd>/</kbd></label>
+    <select id="catalog-category" aria-label="一览物品分类"><option value="all">全部分类</option></select>
+    <select id="catalog-availability" aria-label="出售状态"><option value="all">全部出售状态</option><option value="flea">跳蚤可估值</option><option value="banned">跳蚤禁售</option><option value="unpriced">暂无有效售价</option></select>
+    <button id="catalog-favorites" class="catalog-favorites" aria-pressed="false"><span data-icon="star"></span>只看收藏</button>
+    <div class="toolbar-right"><label class="event-toggle"><input id="catalog-events" type="checkbox"><span>活动限定</span></label><select id="catalog-stack" aria-label="一览堆叠数量"><option value="single">单件 / 单发</option><option value="full">满堆叠</option></select></div>
+  </div>
   <div id="warning" class="notice warning" role="alert" hidden></div>
   <div id="pending" class="notice pending" hidden><span><span data-icon="refresh"></span>有新行情，阅读位置已保留</span><button id="apply-pending">应用更新</button></div>
-  <main class="columns">
+  <main class="columns" id="monitor-panel" aria-label="赚钱监控">
     <section class="column loot-column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="backpack"></span><h1>捡什么 · 卖什么</h1><span class="count" id="loot-count">—</span></div><div class="column-sub"><span>单格净到手 <span data-icon="arrow-down"></span></span><span>卢布 ₽</span></div></div><div class="list" id="loot" tabindex="0" aria-label="拾取与出售，独立滚动"></div></section>
     <section class="column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="exchange"></span><h2>商人倒货</h2><span class="count" id="flips-count">—</span></div><div class="column-sub"><span>每次预计净利润 <span data-icon="arrow-down"></span></span><select id="flip-type" aria-label="倒货类型"><option value="all">直购 + 兑换</option><option value="buy">只看直购</option><option value="barter">只看兑换</option></select></div></div><div class="list" id="flips" tabindex="0" aria-label="倒货，独立滚动"></div></section>
     <section class="column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="craft"></span><h2>藏身处制作</h2><span class="count" id="crafts-count">—</span></div><div class="column-sub"><span id="craft-basis">每小时收益 <span data-icon="arrow-down"></span></span><button id="fuel-button">设置燃料 <span data-icon="chevron"></span></button></div></div><div class="list" id="crafts" tabindex="0" aria-label="制作，独立滚动"></div></section>
+  </main>
+  <main class="catalog-panel" id="catalog-panel" aria-labelledby="items-title" hidden>
+    <div class="catalog-heading"><div><span class="column-symbol" data-icon="box"></span><h1 id="items-title">物品一览</h1><span class="count" id="items-count">—</span><span id="items-total" class="subtle"></span></div><button id="catalog-reset">重置筛选</button></div>
+    <div class="catalog-scroll" id="catalog-scroll" tabindex="0" aria-label="物品一览列表，可上下滚动">
+      <table class="catalog-table"><caption class="sr-only">当前市场全部物品，按单格净值倒序排列，未知价值排最后。</caption><thead><tr>
+        <th scope="col">物品</th><th scope="col">占格</th><th scope="col">跳蚤报价<small>单件 / 单发</small></th><th scope="col">跳蚤净到手<small class="catalog-basis">单件 / 单发</small></th><th scope="col">商人回收<small class="catalog-basis">单件 / 单发</small></th><th scope="col" aria-sort="descending" class="slot-heading">单格净值 <span data-icon="arrow-down"></span><small>取更高的出售净值</small></th><th scope="col"><span class="sr-only">收藏</span></th>
+      </tr></thead><tbody id="catalog-body"></tbody></table>
+      <div id="catalog-empty" class="empty" hidden></div>
+    </div>
+    <div class="catalog-pagination"><span id="catalog-range" role="status">读取物品档案中</span><div><button id="catalog-prev" aria-label="上一页物品">上一页</button><span id="catalog-page">1 / 1</span><button id="catalog-next" aria-label="下一页物品">下一页</button></div></div>
   </main>
   <footer><span id="coverage">正在核对物品、商人和配方</span><div><span class="legend-dot red"></span>短期涨价<span class="legend-dot green"></span>长期高值 / 稳定收益<button id="history-status">历史核验中</button><a href="https://tarkov.dev" target="_blank" rel="noreferrer">数据源 ↗</a></div></footer>
 </div>

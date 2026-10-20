@@ -142,6 +142,40 @@ export function collectLoot(data, options = {}, now = Date.now()) {
   }
   return rows.sort((a, b) => b.slotValue - a.slotValue || a.id.localeCompare(b.id));
 }
+// The catalog retains every source object, including items with no usable sale price.
+// Display preferences filter these rows without removing anything from the snapshot.
+export function collectCatalog(data, options = {}, now = Date.now()) {
+  return values(data.items).map(i => {
+    const count = options.stack === 'full' && positive(i.stack) ? i.stack : 1;
+    const slots = positive(i.width) && positive(i.height) ? i.width * i.height : null;
+    const s = sale(i, data, {...options, allowDelayed:true}, count, now);
+    return {id:i.id, item:i, ...s, kind:'loot', catalog:true, count, slots,
+      slotValue:slots !== null && Number.isFinite(s.net) ? s.net / slots : null,
+      banned:!data.flea.enabled || i.types.includes('noFlea')};
+  }).sort((a,b) => {
+    if (a.slotValue === null || b.slotValue === null) {
+      if (a.slotValue !== b.slotValue) return a.slotValue === null ? 1 : -1;
+    } else if (a.slotValue !== b.slotValue) return b.slotValue - a.slotValue;
+    return a.id.localeCompare(b.id);
+  });
+}
+export function filterCatalog(rows, filters = {}, favorites = [], aliases = {}) {
+  const terms = String(filters.search || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const starred = new Set(favorites);
+  return rows.filter(r => {
+    const i = r.item;
+    if (i.eventOnly && !filters.includeEvents) return false;
+    if (filters.category && filters.category !== 'all' && i.category !== filters.category) return false;
+    if (filters.favoritesOnly && !starred.has(i.id)) return false;
+    if (filters.availability === 'flea' && r.fleaNet === null) return false;
+    if (filters.availability === 'banned' && !r.banned) return false;
+    if (filters.availability === 'unpriced' && Number.isFinite(r.net)) return false;
+    const text = [i.id,i.name,i.shortName,i.english,i.slug].join(' ').toLowerCase();
+    // Known abbreviations match their alias or a full English token (GPU must not match Magpul).
+    const words = new Set(text.split(/[^a-z0-9]+/));
+    return terms.every(t => aliases[t] ? text.includes(aliases[t]) || words.has(t) : text.includes(t));
+  });
+}
 export function isExcluded(item,options={}) {
   if(item.currencyOnly)return true;
   if(item.eventOnly)return !options.includeEvents;

@@ -158,7 +158,7 @@ export async function digest(store,market,origin) {
       url:`${origin}/?market=${market}&item=${r.item.id}`};
   });
   return {version:1,market,generatedAt:data.fetchedAt,source:data.source,delivery:'read-only; no QQ messages sent',items,
-    text:[`${MARKETS[market]} 赚钱旁屏`,...items.slice(0,5).map(i=>`${i.name} · 预计${i.basis==='before-fuel'?'扣燃料前':''}收益 ₽${i.profit.toLocaleString('zh-CN')}`),`${origin}/?market=${market}`].join('\n')};
+    text:[`塔科夫赚钱监控 · ${MARKETS[market]}`,...items.slice(0,5).map(i=>`${i.name} · 预计${i.basis==='before-fuel'?'扣燃料前':''}收益 ₽${i.profit.toLocaleString('zh-CN')}`),`${origin}/?market=${market}`].join('\n')};
 }
 export async function handleApi(request,store) {
   const url=new URL(request.url),market=url.searchParams.get('market')||'pve';

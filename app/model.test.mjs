@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -37,6 +37,57 @@ test('noFlea and old quotes cannot inflate net value',()=>{
   assert.equal(rows[0].slotValue,30000);
   assert.equal(rows[1].slotValue,30000);
   assert.ok(rows.every(r=>r.fleaNet===null));
+});
+
+test('catalog retains unpriced, banned, event, currency and preset objects without inventing zero prices',()=>{
+  const objects=[
+    item('plain'),item('missing',{price:null,sell:[]}),item('banned',{types:['noFlea']}),
+    item('event',{eventOnly:true,excluded:true}),item('cash',{currencyOnly:true,excluded:true}),
+    item('receiver',{defaultPreset:'preset'}),item('preset',{isPreset:true,default:true}),
+    item('custom',{isPreset:true,default:false}),item('no-dimensions',{width:null,height:null})
+  ];
+  const data=dataset(objects),rows=collectCatalog(data,{},now);
+  assert.equal(rows.length,objects.length);
+  assert.equal(rows.find(r=>r.id==='missing').net,null);
+  assert.equal(rows.find(r=>r.id==='missing').slotValue,null);
+  assert.equal(rows.find(r=>r.id==='no-dimensions').slotValue,null);
+  assert.equal(rows.find(r=>r.id==='banned').fleaNet,null);
+  assert.equal(rows.find(r=>r.id==='banned').traderNet,30000);
+  assert.equal(rows.filter(r=>r.slotValue===null).length,2);
+  assert.ok(rows.slice(-2).every(r=>r.slotValue===null));
+  assert.equal(collectLoot(data,{},now).some(r=>['event','cash','receiver','custom','missing'].includes(r.id)),false);
+});
+
+test('catalog filters preserve source data and intersect category, trade state, favorites and event preference',()=>{
+  const data=dataset([item('event',{eventOnly:true}),item('banned',{types:['noFlea'],category:'ammo'}),
+    item('missing',{price:null,sell:[]}),item('plain'),item('cash',{currencyOnly:true})]);
+  const rows=collectCatalog(data,{},now);
+  assert.equal(filterCatalog(rows).length,4);
+  assert.equal(filterCatalog(rows,{includeEvents:true}).length,5);
+  assert.deepEqual(filterCatalog(rows,{availability:'banned'}).map(r=>r.id),['banned']);
+  assert.deepEqual(filterCatalog(rows,{availability:'unpriced'}).map(r=>r.id),['missing']);
+  assert.deepEqual(filterCatalog(rows,{category:'ammo',favoritesOnly:true},['banned','plain']).map(r=>r.id),['banned']);
+  assert.equal(filterCatalog(rows,{availability:'flea'}).some(r=>['missing','banned'].includes(r.id)),false);
+  assert.equal(Object.keys(data.items).length,5);
+});
+
+test('catalog searches full names, English, aliases and exact source IDs with deterministic value ordering',()=>{
+  const gpu=item('57347ca924597744596b4e71',{name:'显卡',english:'Graphics card',price:120000,average:120000});
+  const rows=collectCatalog(dataset([item('large',{width:2,height:3}),gpu,item('small'),item('stock',{name:'Magpul 枪托',english:'Magpul stock'})]),{},now);
+  for(const search of ['显卡','graphics CARD',gpu.id,'gpu'])assert.deepEqual(filterCatalog(rows,{search},[],{gpu:'显卡'}).map(r=>r.id),[gpu.id]);
+  assert.ok(rows.every((r,index)=>!index||rows[index-1].slotValue>=r.slotValue));
+});
+
+test('catalog uses selected stack, current profile fees and current-market eligibility',()=>{
+  const ammo=item('round',{stack:60,basePrice:1000,price:1000,average:1000,sell:[{trader:'t',priceRUB:50}]});
+  const data=dataset([ammo]);
+  const [single]=collectCatalog(data,{},now),[full]=collectCatalog(data,{stack:'full',intelligence:3},now);
+  assert.equal(single.slotValue,900);assert.equal(full.slotValue,55800);
+  assert.equal(full.traderNet,3000);assert.equal(full.count,60);
+  const [locked]=collectCatalog(data,{playerLevel:5},now);
+  assert.equal(locked.fleaNet,null);assert.equal(locked.slotValue,50);
+  const [disabled]=collectCatalog({...data,flea:{...flea,enabled:false}},{},now);
+  assert.equal(disabled.banned,true);assert.equal(disabled.fleaNet,null);
 });
 test('delayed loot prices remain explicit references while being excluded from flipping',()=>{
   const delayed=item('rare',{scan:new Date(now-2*3600000).toISOString(),buy:[{trader:'t',priceRUB:10000,currency:'RUB'}]});
