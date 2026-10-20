@@ -1,0 +1,195 @@
+<style>
+#eft-side {
+  --es-bg:light-dark(#f3f4ee,#131811);--es-panel:light-dark(#ffffff,#1c2419);
+  --es-fg:light-dark(#253021,#e7eddc);--es-muted:light-dark(#5c6854,#a8b39d);
+  --es-line:light-dark(#d8e0ce,#35422d);--es-accent:light-dark(#386322,#c2df86);
+  --es-selected:light-dark(#e9f2dd,#304326);--es-amber:light-dark(#80511b,#ecc188);
+  --es-size:16px;
+  width:100%;border:1px solid var(--es-line);border-radius:14px;overflow:clip;
+  background:var(--es-bg);color:var(--es-fg);font:var(--es-size)/1.5 system-ui,"Microsoft YaHei",sans-serif;
+}
+#eft-side *{box-sizing:border-box}
+#eft-side [hidden]{display:none!important}
+#eft-side button,#eft-side select,#eft-side input{font:inherit;color:inherit;border:1px solid var(--es-line);background:var(--es-panel);border-radius:7px;padding:8px 12px}
+#eft-side button:hover{background:var(--es-selected)}
+#eft-side button[aria-pressed="true"]{color:var(--es-accent);background:var(--es-selected);border-color:var(--es-accent)}
+#eft-side .es-head{padding:18px 110px 15px 22px;display:flex;align-items:center;gap:12px 26px;flex-wrap:wrap;background:var(--es-panel);border-bottom:1px solid var(--es-line)}
+#eft-side .es-brand{font-size:23px;font-weight:600;letter-spacing:-.6px}
+#eft-side .es-caption{font-size:12px;color:var(--es-muted)}
+#eft-side .es-market{display:flex;gap:8px;align-items:center;font-size:14px;flex-wrap:wrap}
+#eft-side .es-toolbar{padding:14px 20px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+#eft-side #es-search{flex:1 1 180px;min-width:0;max-width:310px}
+#eft-side .es-scenes{display:flex;gap:5px;flex-wrap:wrap}
+#eft-side .es-demo{font-size:12px;color:var(--es-amber);padding:0 22px 12px}
+#eft-side .es-main{padding:0 20px 18px}
+#eft-side .es-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;align-items:start}
+#eft-side .es-panel{border:1px solid var(--es-line);background:var(--es-panel);border-radius:10px;overflow:clip}
+#eft-side .es-panel-head{padding:14px 16px 12px;border-bottom:1px solid var(--es-line);display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+#eft-side h2{font-size:18px;font-weight:500;margin:0;line-height:1.4}
+#eft-side .es-small{font-size:12px;color:var(--es-muted)}
+#eft-side .es-row{padding:12px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-bottom:1px solid var(--es-line)}
+#eft-side .es-row:last-child{border-bottom:0}
+#eft-side .es-row.es-picked{background:var(--es-selected)}
+#eft-side .es-item{font-size:var(--es-name-size,17px);font-weight:500;margin-bottom:2px;overflow-wrap:anywhere}
+#eft-side .es-badge{font-size:11px;font-weight:400;color:var(--es-accent);margin-left:5px;white-space:nowrap}
+#eft-side .es-badge.es-hot{color:var(--es-amber)}
+#eft-side .es-amount{font-size:var(--es-amount-size,23px);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:-.6px}
+#eft-side .es-action{border:0;background:transparent;padding:2px 0;text-align:right;min-width:95px}
+#eft-side .es-action:hover{background:transparent;text-decoration:underline}
+#eft-side .es-note{font-size:12px;color:var(--es-muted);overflow-wrap:anywhere}
+#eft-side .es-row .es-side{font-size:11px;color:var(--es-muted);text-align:right}
+#eft-side .es-rest{padding:12px 15px;background:var(--es-selected);font-size:13px}
+#eft-side .es-strip{margin-top:14px;padding:12px 15px;border:1px solid var(--es-line);border-radius:9px;background:var(--es-panel);display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap}
+#eft-side .es-strip button{font-size:13px;padding:6px 9px}
+#eft-side .es-detail{margin-top:14px;padding:13px 16px;border-left:3px solid var(--es-accent);background:var(--es-panel);display:flex;gap:7px 22px;flex-wrap:wrap;align-items:baseline}
+#eft-side .es-detail strong{font-weight:500;font-size:16px}
+#eft-side .es-calculation{font-size:13px;color:var(--es-muted)}
+#eft-side .es-result{font-size:19px;color:var(--es-accent);font-variant-numeric:tabular-nums}
+#eft-side .es-rule{font-size:12px;color:var(--es-muted);width:100%}
+#eft-side .es-footer{padding:10px 20px;border-top:1px solid var(--es-line);display:flex;justify-content:space-between;gap:5px 12px;flex-wrap:wrap;font-size:12px;color:var(--es-muted)}
+#eft-side .es-empty{padding:22px 16px;color:var(--es-muted)}
+@media(max-width:650px){
+  #eft-side .es-grid{grid-template-columns:1fr}
+  #eft-side .es-head{padding-left:16px}
+  #eft-side .es-toolbar{padding:12px}
+  #eft-side .es-main{padding:0 12px 14px}
+  #eft-side .es-demo{padding-left:14px}
+  #eft-side .es-brand{font-size:21px}
+  #eft-side .es-row{padding:12px}
+  #eft-side .es-amount{font-size:21px}
+  #eft-side .es-item{font-size:16px}
+}
+@media(pointer:coarse){
+  #eft-side button,#eft-side input,#eft-side select{min-height:44px}
+  #eft-side input,#eft-side select{font-size:16px}
+}
+</style>
+<div id="eft-side" aria-label="塔科夫笔记本旁屏设计预览">
+  <header class="es-head">
+    <div><div class="es-brand">塔科夫赚钱旁屏</div><div class="es-caption">瞥一眼，就知道下一步</div></div>
+    <label class="es-market">市场
+      <select id="es-mode" class="cursor-interaction"><option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="season">PVP 赛季</option></select>
+    </label>
+  </header>
+  <div class="es-toolbar">
+    <div class="es-scenes" aria-label="游玩场景">
+      <button type="button" class="cursor-interaction" data-scene="raid" aria-pressed="true">局内速看</button>
+      <button type="button" class="cursor-interaction" data-scene="stash" aria-pressed="false">局外经营</button>
+    </div>
+    <input id="es-search" type="search" aria-label="搜索演示物品" placeholder="搜索物品、简称…">
+  </div>
+  <div class="es-demo">交互草图 · 所有价格、手续费、趋势与收益均为演示，不能作为当前交易依据</div>
+  <main class="es-main">
+    <div id="es-raid" class="es-grid">
+      <section class="es-panel" aria-label="常备捡取清单">
+        <div class="es-panel-head"><h2>这些值得捡</h2><span class="es-small">预计净到手 / 格</span></div>
+        <div id="es-loot"></div>
+        <div class="es-rest">已隐藏活动限定 · 清单位置固定，刷新不跳动</div>
+      </section>
+      <section class="es-panel" aria-label="短线卖出机会">
+        <div class="es-panel-head"><h2>这会儿卖，更划算</h2><span class="es-small">短线关注</span></div>
+        <div id="es-selling"></div>
+        <div class="es-rest">买入再卖的利润，请看「局外经营」</div>
+      </section>
+    </div>
+    <div id="es-stash" hidden>
+      <div class="es-grid">
+        <section class="es-panel" aria-label="商人倒货">
+          <div class="es-panel-head"><h2>商人倒货</h2><span class="es-small">预计净利润 / 次</span></div>
+          <div id="es-flips"></div>
+          <div class="es-rest">个人条件未配置 · 交易前核对等级与任务</div>
+        </section>
+        <section class="es-panel" aria-label="藏身处制作">
+          <div class="es-panel-head"><h2>藏身处搓什么</h2><span class="es-small">预计净利润 / 小时</span></div>
+          <div id="es-crafts"></div>
+          <div class="es-rest">长配方同时看「按平常价格卖」的利润</div>
+        </section>
+      </div>
+      <div class="es-strip" id="es-strip"></div>
+    </div>
+    <section class="es-detail" id="es-detail" aria-label="所选项目的收益明细" aria-live="polite"></section>
+  </main>
+  <footer class="es-footer"><span id="es-status" aria-live="polite">PVE · 演示数据</span><span>清单固定 · 变化单独提醒 · 不自动切屏</span></footer>
+</div>
+<script>
+(() => {
+  const root=document.getElementById('eft-side');
+  const names={pve:'PVE',regular:'PVP 常规',season:'PVP 赛季'};
+  const goods=[
+    {id:'ledx',name:'LEDX',alias:'ledx',price:900000,fee:85000,slots:1,trader:494700,base:850000,long:true,tag:'长线高值',note:'1 格 · 优先留位置'},
+    {id:'sugar',name:'一包糖',alias:'sugar 糖',price:96000,fee:9000,slots:1,trader:18000,base:60000,long:true,hot:true,tag:'短线 +60%',note:'1 格 · 常备清单里也有短线机会'},
+    {id:'bolt',name:'螺栓',alias:'bolt bolts',price:45000,fee:4500,slots:1,trader:3500,base:42000,long:true,tag:'长线常捡',note:'1 格 · 常规战利品'},
+    {id:'fuel',name:'金属燃料桶',alias:'fuel 油桶',price:240000,fee:21000,slots:6,trader:60000,base:230000,long:true,tag:'长线常捡',note:'6 格 · 按满容量估值'},
+    {id:'filter',name:'滤水器',alias:'water filter 水滤',price:150000,fee:15000,slots:2,trader:20000,base:100000,hot:true,tag:'短线 +50%',note:'2 格 · 当前报价高于平常'}
+  ];
+  const flips=[
+    {id:'lcd',name:'正常工作的液晶显示屏',price:88000,fee:9000,cost:44000,base:83000,long:true,tag:'长线观察',note:'机械师 LL2 · 破损液晶屏 ×2 换 1',gate:'每轮上限 10 次；实际库存须在游戏确认'},
+    {id:'direct',name:'商人直购示例',price:160000,fee:18000,cost:100000,base:118000,hot:true,tag:'短线机会',note:'买入后挂跳蚤 · 示例上限 2 次',gate:'此条用于演示直购利润，不代表实际商品'}
+  ];
+  const crafts=[
+    {id:'crafta',name:'制作配方示例 A',price:200000,fee:18000,cost:112000,fuel:10000,hours:2,base:190000,long:true,tag:'长线观察',note:'2 小时 / 批',gate:'可复用工具不重复扣费；燃料已分摊'},
+    {id:'craftb',name:'制作配方示例 B',price:320000,fee:35000,cost:180000,fuel:15000,hours:6,base:220000,hot:true,tag:'短线需谨慎',note:'6 小时 / 批',gate:'完工前售价可能回落；应重新计算常态价格下的净利润'}
+  ];
+  const all=[...goods,...flips,...crafts];
+  let state={scene:'raid',mode:'pve',search:'',selected:'sugar'};
+  function valid(value){return value&&['raid','stash'].includes(value.scene)&&names[value.mode]&&typeof value.search==='string'}
+  const initial=globalThis.openai?.widgetState?.privateContent;
+  if(valid(initial))state={...state,...initial};
+  const appearance={larger:false};
+  const money=n=>Math.round(n).toLocaleString('zh-CN')+' ₽';
+  function price(item){
+    const scale=state.mode==='pve'?1:state.mode==='regular'?.72:.9;
+    const costScale=state.mode==='pve'?1:state.mode==='regular'?.78:.88;
+    const x={...item,price:Math.round(item.price*scale),fee:Math.round(item.fee*scale),cost:Math.round((item.cost||0)*costScale),fuel:item.fuel||0,base:Math.round(item.base*scale)};
+    x.net=Math.max(x.price-x.fee,x.trader||0);x.profit=x.price-x.fee-x.cost-x.fuel;
+    return x;
+  }
+  function matches(x){return (x.name+' '+(x.alias||'')).toLowerCase().includes(state.search.toLowerCase())}
+  function badge(x){return `<span class="es-badge ${x.hot?'es-hot':''}">${x.tag}</span>`}
+  function rows(items,kind){
+    const shown=items.filter(matches);
+    return shown.map(item=>{
+      const x=price(item),amount=kind==='loot'?x.net/x.slots:kind==='craft'?x.profit/x.hours:kind==='flip'?x.profit:x.net;
+      const desc=kind==='sell'?`平常报价 ${money(x.base)} · 现在报价 ${money(x.price)}`:kind==='craft'?`${x.hours} 小时 / 批 · 每批净利润 ${money(x.profit)}`:x.note;
+      return `<div class="es-row ${state.selected===x.id?'es-picked':''}"><div><div class="es-item">${x.name}${badge(x)}</div><div class="es-note">${desc}</div></div><div><button type="button" class="es-action cursor-interaction" data-item="${x.id}" aria-label="查看${x.name}收益明细"><span class="es-amount">${money(amount)}</span></button><div class="es-side">${kind==='sell'?'预计净到手':kind==='loot'?'净到手 / 格':kind==='craft'?'净利润 / 小时':'净利润 / 次'}</div></div></div>`;
+    }).join('')||'<div class="es-empty">未匹配演示物品</div>';
+  }
+  function render(){
+    root.style.setProperty('--es-size',appearance.larger?'18px':'16px');
+    root.style.setProperty('--es-name-size',appearance.larger?'20px':'17px');
+    root.style.setProperty('--es-amount-size',appearance.larger?'28px':'23px');
+    const eligible=(state.scene==='raid'?goods:[...flips,...crafts,...goods.filter(x=>x.hot)]).filter(matches);
+    if(!eligible.some(x=>x.id===state.selected))state.selected=eligible[0]?.id||null;
+    root.querySelector('#es-mode').value=state.mode;
+    root.querySelector('#es-search').value=state.search;
+    root.querySelectorAll('[data-scene]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.scene===state.scene)));
+    root.querySelector('#es-raid').hidden=state.scene!=='raid';
+    root.querySelector('#es-stash').hidden=state.scene!=='stash';
+    root.querySelector('#es-loot').innerHTML=rows(goods.filter(x=>x.long),'loot');
+    root.querySelector('#es-selling').innerHTML=rows(goods.filter(x=>x.hot),'sell');
+    root.querySelector('#es-flips').innerHTML=rows(flips,'flip');
+    root.querySelector('#es-crafts').innerHTML=rows(crafts,'craft');
+    root.querySelector('#es-strip').innerHTML='<span class="es-small">库存出货关注</span>'+goods.filter(x=>x.hot&&matches(x)).map(x=>`<button type="button" class="cursor-interaction" data-item="${x.id}">${x.name} · ${x.tag}</button>`).join('');
+    const selected=all.find(x=>x.id===state.selected);
+    const detail=root.querySelector('#es-detail');
+    if(selected){
+      const x=price(selected),business=x.cost>0;
+      detail.innerHTML=`<strong>${x.name}</strong><span class="es-calculation">售价 ${money(x.price)} − 手续费 ${money(x.fee)}${business?' − 成本 '+money(x.cost):''}${x.fuel?' − 燃料 '+money(x.fuel):''}</span><span class="es-result">${business?'预计净利润 ':'预计净到手 '}${money(business?x.profit:x.net)}</span><div class="es-rule">${x.gate||'示例按一次上架成功计算；实际卖出前需确认物品状态与最新报价'} · 金额为演示值</div>`;
+    } else detail.innerHTML='<span class="es-small">点击金额查看收益明细</span>';
+    root.querySelector('#es-status').textContent=`${names[state.mode]} · ${state.scene==='raid'?'局内速看':'局外经营'} · 演示数据`;
+  }
+  function save(){if(globalThis.openai?.setWidgetState)globalThis.openai.setWidgetState({modelContent:{prototype:true,scenario:state.scene,market:names[state.mode],selected:state.selected},privateContent:state}).catch(()=>{})}
+  root.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.scene){state.scene=b.dataset.scene;state.search='';state.selected=state.scene==='raid'?'sugar':'lcd'}
+    else if(b.dataset.item)state.selected=b.dataset.item;
+    else return;
+    render();save();
+  });
+  root.querySelector('#es-mode').addEventListener('change',e=>{state.mode=e.target.value;render();save()});
+  root.querySelector('#es-search').addEventListener('input',e=>{state.search=e.target.value;render();save()});
+  globalThis.addEventListener('openai:set_globals',e=>{const next=e.detail?.globals?.widgetState?.privateContent;if(valid(next)){state={...state,...next};render()}});
+  render();
+  if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:render});tweak.addToggle(appearance,'larger',{label:'放大正文'})}
+})();
+</script>
