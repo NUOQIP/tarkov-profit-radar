@@ -1,6 +1,6 @@
-import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,profitStability,scenario,isShortOpportunity,lowOfferCount } from '/engine.js';
+import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,scenario,isShortOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
-import { quicklookLayout,opportunityTone,partitionQuicklook } from '/quicklook.js';
+import { quicklookLayout,opportunityTone,QUICKLOOK_VALUE_STEPS,DEFAULT_QUICKLOOK_RANGE,EVERYDAY_QUICKLOOK_RANGE,normalizeQuicklookRange,quicklookRangeMatches } from '/quicklook.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
 const UI_REVISION=6;
@@ -47,6 +47,7 @@ function safeView(v={}){
     search:typeof v.search==='string'?v.search.slice(0,200):'',
     includeEvents:v.includeEvents===true,
     lootScope:v.lootScope==='scavenging'?'scavenging':'all',quicklookView:v.quicklookView==='list'?'list':'cloud',station:typeof v.station==='string'?v.station:'all',
+    quicklookTypes:normalizeScavengingCategories(v.quicklookTypes),quicklookRange:normalizeQuicklookRange(v.quicklookRange),
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
 }
 function safeCatalogView(v={}){
@@ -143,6 +144,8 @@ function syncQuicklook(){
   const active=inQuicklook(),cloud=inCloud();
   document.body.dataset.quicklook=cloud?'cloud':active?'list':'off';
   $('#quicklook-controls').hidden=!active;
+  $('#quicklook-rangebar').hidden=!active;
+  if(active)syncQuicklookRange();
   $$('[data-quicklook-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quicklookView===view().quicklookView)));
   $('#quicklook-repack').hidden=!cloud;
 
@@ -153,8 +156,25 @@ function syncQuicklook(){
     $('#sort-indicator').textContent=cloud?'单格净值 · ₽':'单格净值 ↓';
   }
 }
+const rangeLabel=index=>QUICKLOOK_VALUE_STEPS[index]===null?'无上限':QUICKLOOK_VALUE_STEPS[index]===0?'0':QUICKLOOK_VALUE_STEPS[index]/10000+'万';
+function syncQuicklookRange(){
+  const v=view(),[low,high]=v.quicklookRange,last=QUICKLOOK_VALUE_STEPS.length-1;
+  $('#quicklook-type-count').textContent=v.quicklookTypes.length;
+  $('#quicklook-types-button').title=v.quicklookTypes.map(k=>SCAVENGING_CATEGORIES[k]).join('、')||'选择要显示的物品类型';
+  for(const [id,index] of [['quicklook-min',low],['quicklook-max',high]]){
+    const input=$('#'+id);input.value=index;input.setAttribute('aria-valuetext',rangeLabel(index)+(index===last?'':'卢布每格'));
+  }
+  $('#quicklook-range-value').textContent=rangeLabel(low)+' — '+rangeLabel(high);
+  $('#quicklook-range-track').style.setProperty('--range-start',low/last*100+'%');
+  $('#quicklook-range-track').style.setProperty('--range-end',high/last*100+'%');
+  $('#quicklook-everyday').setAttribute('aria-pressed',String(low===EVERYDAY_QUICKLOOK_RANGE[0]&&high===EVERYDAY_QUICKLOOK_RANGE[1]));
+  $('#quicklook-range-default').hidden=low===DEFAULT_QUICKLOOK_RANGE[0]&&high===DEFAULT_QUICKLOOK_RANGE[1];
+}
+function renderQuicklookTypeChoices(selected){
+  $('#quicklook-type-options').innerHTML=Object.entries(SCAVENGING_CATEGORIES).map(([key,label])=>`<label class="type-choice"><input type="checkbox" data-quicklook-type="${key}" ${selected.includes(key)?'checked':''}><span>${esc(label)}</span></label>`).join('');
+}
 function resetCurrentFilters(){
-  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents}));
+  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents,lootScope:v.lootScope,quicklookView:v.quicklookView}));
   syncControls();rebuild();render();persist();
 }
 
@@ -203,14 +223,13 @@ function renderCatalog(preserve=false){
   if(target)scroller.scrollTop+=target.getBoundingClientRect().top-scroller.getBoundingClientRect().top-offset;
 }
 function matches(row){
-  const v=view(),c=criteria(),i=row.item;
-  if(row.kind==='loot'&&v.lootScope==='scavenging'&&!isScavengingItem(i))return false;
-  if(row.kind==='loot'&&inCloud()&&(!Number.isFinite(row.slotValue)||row.slotValue<=0||(!v.search.trim()&&v.filter!=='favorites'&&row.slotValue<30000)))return false;
+  const v=view(),c=criteria(),i=row.item,quick=row.kind==='loot'&&inQuicklook();
+  if(quick&&(!isScavengingItem(i,v.quicklookTypes)||!quicklookRangeMatches(row.slotValue,v.quicklookRange)))return false;
   if(row.kind==='craft'&&v.station!=='all'&&row.station?.id!==v.station)return false;
-  if(v.category!=='all'&&v.category!==i.category)return false;
+  if(!quick&&v.category!=='all'&&v.category!==i.category)return false;
   if(v.filter==='favorites'&&!state.favorites[state.market].includes(i.id))return false;
   if(v.filter==='short'&&!signal(row).short)return false;
-  if(row.kind==='loot'&&((c.minSlot||0)>row.slotValue||(c.freshOnly&&row.status!=='可参考')))return false;
+  if(row.kind==='loot'&&((!quick&&(c.minSlot||0)>row.slotValue)||(c.freshOnly&&row.status!=='可参考')))return false;
   if(row.kind!=='loot'&&((c.minProfit>0&&(!Number.isFinite(row.profit)||c.minProfit>row.profit))||(c.budget>0&&(!Number.isFinite(row.purchase)||row.purchase>c.budget))))return false;
   if(row.kind==='craft'&&c.maxHours>0&&row.hours>c.maxHours)return false;
   const term=(v.search||'').trim().toLowerCase();if(!term)return true;
@@ -233,6 +252,8 @@ function quicklookTile(r,cell,index){
   const i=r.item,s=signal(r),tone=opportunityTone(r,s),old=quicklookPrices.get(r.id);
   const amount=r.slotValue>=10000?(Math.round(r.slotValue/1000)/10).toLocaleString('zh-CN',{maximumFractionDigits:1}):fmt(r.slotValue);
   const unit=r.slotValue>=10000?'万':'₽';
+  const packCount=i.types.includes('ammoBox')?(i.containsItems||[]).reduce((sum,p)=>sum+p.count,0):0;
+  const name=(i.shortName||i.name)+(packCount?' ×'+packCount:'');
   const vendor=data.traders[r.vendor?.trader]?.name;
   const traderWins=vendor&&Number.isFinite(r.fleaNet)&&Number.isFinite(r.traderNet)&&r.traderNet>r.fleaNet;
   const risk=data.flea.enabled&&!i.types.includes('noFlea')&&lowOfferCount(i);
@@ -242,48 +263,41 @@ function quicklookTile(r,cell,index){
   return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · ${esc(r.channel)} · 单格净值 ₽${fmt(r.slotValue)}">
     <span class="cloud-topline">${status}${flag}</span>
     <span class="cloud-art">${image(i.art||i.image,'','cloud-image',i.image)}</span>
-    <span class="cloud-caption"><span class="cloud-name">${esc(i.shortName||i.name)}</span><span class="cloud-value"><strong>${amount}</strong><span>${unit}<small>/ 格</small></span></span>${note}</span>
+    <span class="cloud-caption"><span class="cloud-name">${esc(name)}</span><span class="cloud-value"><strong>${amount}</strong><span>${unit}<small>/ 格</small></span></span>${note}</span>
     <span class="cloud-open" aria-hidden="true">${icon('chevron')}</span>
   </button>`;
 }
 function renderQuicklook(){
   const root=$('#loot');
-  if(!root.querySelector('.quicklook-split'))root.innerHTML=`<div class="quicklook-board quicklook-split">
-    <section class="quicklook-zone quicklook-everyday" aria-label="杂物优先"><header><h2>杂物优先 <span id="quicklook-everyday-range">3–10万 / 格</span></h2><span id="quicklook-everyday-count"></span></header><div class="quicklook-stage"><div class="quicklook-grid" data-cloud-zone="everyday"></div><span class="cloud-zone-empty" hidden>暂无匹配物品</span></div></section>
-    <section class="quicklook-zone quicklook-high" aria-label="高价留意"><header><h2>高价留意 <span>10万以上 / 格</span></h2><span id="quicklook-high-count"></span></header><div class="quicklook-stage"><div class="quicklook-grid" data-cloud-zone="high"></div><span class="cloud-zone-empty" hidden>暂无匹配物品</span></div></section>
-    </div><div class="quicklook-foot"><span id="quicklook-coverage"></span><button data-quicklook-view="list">查看完整列表 ${icon('chevron')}</button></div>`;
+  if(!root.querySelector('.quicklook-unified'))root.innerHTML=`<div class="quicklook-board quicklook-unified"><div class="quicklook-grid"></div></div><div class="quicklook-foot"><span id="quicklook-coverage"></span><button data-quicklook-view="list">查看完整列表 ${icon('chevron')}</button></div>`;
   const key=JSON.stringify([state.market,view(),state.density]);
   const previous=key===quicklookKey?quicklookPlan:null;
-  const includeLower=!!view().search.trim()||view().filter==='favorites';
-  const groups=partitionQuicklook(visible.loot,{includeLower});
+  const grid=root.querySelector('.quicklook-grid'),board=grid.parentElement;
+  const compact=state.density==='compact',height=board.clientHeight-20;
+  const fit=quicklookLayout([],{width:board.clientWidth-20,height,compact,spotlight:false});
+  const rowHeight=Math.max(compact?88:104,(height-7*(fit.rows-1))/fit.rows);
+  const plan=quicklookLayout(visible.loot,{width:board.clientWidth-20,height,compact,spotlight:false,showAll:true,previous});
+  grid.style.height=(plan.rows*rowHeight+7*(plan.rows-1)+20)+'px';
+  if(key!==quicklookKey)board.scrollTop=0;
+  grid.style.setProperty('--cloud-columns',plan.columns);grid.style.setProperty('--cloud-rows',plan.rows);
   const focused=root.contains(document.activeElement)?document.activeElement.dataset.cloudId:null;
   const existing=new Map([...root.querySelectorAll('[data-cloud-id]')].map(el=>[el.dataset.cloudId,el]));
-  const markup=new Map(),plans={};let shown=0;
-  for(const zone of ['everyday','high']){
-    const grid=root.querySelector(`[data-cloud-zone="${zone}"]`),stage=grid.parentElement;
-    const plan=quicklookLayout(groups[zone],{width:stage.clientWidth-20,height:stage.clientHeight-20,compact:state.density==='compact',spotlight:false,previous:previous?.[zone]});
-    plans[zone]=plan;shown+=plan.cells.length;
-    grid.style.setProperty('--cloud-columns',plan.columns);grid.style.setProperty('--cloud-rows',plan.rows);
-    const byId=new Map(groups[zone].map(r=>[r.id,r]));
-    const tiles=plan.cells.map((c,index)=>{
-      const html=quicklookTile(byId.get(c.id),c,index),old=existing.get(c.id);markup.set(c.id,html);
-      if(old&&quicklookMarkup.get(c.id)===html)return old;
-      const template=document.createElement('template');template.innerHTML=html;const fresh=template.content.firstElementChild;
-      if(!old)return fresh;
-      const priorImage=old.querySelector('img'),nextImage=fresh.querySelector('img');
-      if(priorImage&&nextImage&&(priorImage.src===nextImage.src||priorImage.src===nextImage.dataset.fallback))nextImage.replaceWith(priorImage);
-      for(const attribute of ['class','style','title','aria-label'])old.setAttribute(attribute,fresh.getAttribute(attribute));
-      old.replaceChildren(...fresh.childNodes);return old;
-    });
-    grid.replaceChildren(...tiles);
-    stage.querySelector('.cloud-zone-empty').hidden=groups[zone].length>0;
-    $('#quicklook-'+zone+'-count').textContent=plan.cells.length+' / '+fmt(groups[zone].length);
-  }
-  quicklookPlan=plans;quicklookKey=key;quicklookMarkup=markup;
+  const markup=new Map(),byId=new Map(visible.loot.map(r=>[r.id,r]));
+  const tiles=plan.cells.map((c,index)=>{
+    const html=quicklookTile(byId.get(c.id),c,index),old=existing.get(c.id);markup.set(c.id,html);
+    if(old&&quicklookMarkup.get(c.id)===html)return old;
+    const template=document.createElement('template');template.innerHTML=html;const fresh=template.content.firstElementChild;
+    if(!old)return fresh;
+    const priorImage=old.querySelector('img'),nextImage=fresh.querySelector('img');
+    if(priorImage&&nextImage&&(priorImage.src===nextImage.src||priorImage.src===nextImage.dataset.fallback))nextImage.replaceWith(priorImage);
+    for(const attribute of ['class','style','title','aria-label'])old.setAttribute(attribute,fresh.getAttribute(attribute));
+    old.replaceChildren(...fresh.childNodes);return old;
+  });
+  grid.replaceChildren(...tiles);
+  quicklookPlan=plan;quicklookKey=key;quicklookMarkup=markup;
   quicklookPrices=new Map(visible.loot.map(r=>[r.id,r.slotValue]));
   if(focused)root.querySelector(`[data-cloud-id="${focused}"]`)?.focus({preventScroll:true});
-  $('#quicklook-everyday-range').textContent=includeLower?'10万以内 / 格':'3–10万 / 格';
-  $('#quicklook-coverage').textContent=`展示 ${shown} / ${fmt(visible.loot.length)} 项`;
+  $('#quicklook-coverage').textContent=`${fmt(visible.loot.length)} 项 · 单格净值 ↓${plan.rows>fit.rows?' · 下滑查看更多':''}`;
 }
 function card(r,index){
   const i=r.item,s=signal(r),loot=r.kind==='loot',craft=r.kind==='craft',fav=state.favorites[state.market].includes(i.id);
@@ -337,10 +351,11 @@ function render(preserve=false){
 }
 function renderFilterSummary(){
   const v=state.page==='items'?catalogView():view(),chips=[];
-  if(v.category!=='all')chips.push(['category',CATEGORIES[v.category]]);
+  if(!inQuicklook()&&v.category!=='all')chips.push(['category',CATEGORIES[v.category]]);
   if(view().includeEvents)chips.push(['events','含活动品']);
   if(state.page==='items'){if(v.availability!=='all')chips.push(['availability',{flea:'跳蚤可估值',banned:'跳蚤禁售',unpriced:'暂无售价'}[v.availability]]);}
   else for(const [key,label] of [['minSlot','单格 ≥'],['minProfit','净利 ≥'],['budget','预算 ≤'],['maxHours','工时 ≤'],['onlyExecutable','条件已满足'],['freshOnly','1小时内报价']]){
+    if(inQuicklook()&&key==='minSlot')continue;
     const n=criteria()[key];if(n)chips.push([key,typeof n==='boolean'?label:label+' '+fmt(n)+(key==='maxHours'?'h':'')]);
   }
   $('#filter-active').hidden=!chips.length;$('#filter-active').textContent=chips.length;
@@ -537,13 +552,24 @@ function showSettings(){
 function showInfo(title,html){$('#info-title').textContent=title;$('#info-content').innerHTML=html;$('#info-dialog').showModal();}
 function toggleFavorite(id){const list=state.favorites[state.market],index=list.indexOf(id);if(index<0)list.push(id);else list.splice(index,1);persist();render(true);if(detailRow?.item.id===id){const button=$('#detail-content [data-favorite]');if(button)button.innerHTML=icon('star')+(index<0?'已收藏':'收藏');}toast(index<0?'已收藏；收藏页仍按价值排序。':'已取消收藏');}
 function showFilters(){
-  const c=criteria(),catalog=state.page==='items';
+  const c=criteria(),catalog=state.page==='items',quick=inQuicklook();
+  $('#filters-title').textContent=quick?'跑刀速览筛选':'筛选条件';
+  $('#quicklook-filter-fields').hidden=!quick;$('#coarse-category-field').hidden=quick;
+  $('#clear-filters').textContent=quick?'恢复默认':'清除筛选';
+  if(quick){
+    renderQuicklookTypeChoices(view().quicklookTypes);
+    for(const [id,index] of [['quicklook-filter-min',0],['quicklook-filter-max',1]]){
+      $('#'+id).innerHTML=QUICKLOOK_VALUE_STEPS.map((value,i)=>value===null&&index===0?'':`<option value="${i}">${rangeLabel(i)}</option>`).join('');
+      $('#'+id).value=view().quicklookRange[index];
+    }
+  }
   $('#normal-filter-fields').hidden=catalog;$('#catalog-filter-fields').hidden=!catalog;
   for(const [id,key] of [['min-slot','minSlot'],['min-profit','minProfit'],['budget','budget'],['max-hours','maxHours']])$('#'+id).value=c[key]||'';
   $('#only-executable').checked=c.onlyExecutable||false;$('#fresh-only').checked=c.freshOnly||false;
   $('#category').value=view().category;$('#include-events').checked=view().includeEvents;
   $('#catalog-category').value=catalogView().category;$('#catalog-availability').value=catalogView().availability;$('#catalog-events').checked=view().includeEvents;
   $$('[data-filter-for]').forEach(el=>el.hidden=el.dataset.filterFor==='trades'?!['flips','crafts'].includes(state.page):el.dataset.filterFor!==state.page);
+  $('#min-slot-field').hidden=state.page!=='loot'||quick;
   $('#filters').showModal();
 }
 function exportSettings(){const blob=new Blob([JSON.stringify({version:3,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -571,6 +597,8 @@ document.addEventListener('click',event=>{
   if(target.hasAttribute('data-retry'))refresh(true);
   if(target.dataset.days){chartDays=Number(target.dataset.days);$$('[data-days]').forEach(b=>b.classList.toggle('active',Number(b.dataset.days)===chartDays));historyDetail();}
   if(target.dataset.quicklookView){view().quicklookView=target.dataset.quicklookView;animateNext=true;render();persist();}
+  if(target.id==='quicklook-everyday'||target.id==='quicklook-range-default'){view().quicklookRange=[...(target.id==='quicklook-everyday'?EVERYDAY_QUICKLOOK_RANGE:DEFAULT_QUICKLOOK_RANGE)];render();persist();}
+  if(target.dataset.quicklookSelect){const choice=target.dataset.quicklookSelect;$$('[data-quicklook-type]').forEach(el=>el.checked=choice==='all'||(choice==='default'&&DEFAULT_SCAVENGING_CATEGORIES.includes(el.dataset.quicklookType)));}
   if(target.id==='quicklook-repack'){quicklookPlan=null;animateNext=true;render(true);}
   if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;animateNext=true;render();persist();}
   if(target.hasAttribute('data-price')&&Number(target.dataset.price)>0){$('#target-price').value=target.dataset.price;updateScenario();}
@@ -596,6 +624,16 @@ $('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause')
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
+$('#quicklook-types-button').addEventListener('click',showFilters);
+for(const [id,index] of [['quicklook-min',0],['quicklook-max',1]])$('#'+id).addEventListener('input',e=>{
+  const range=[...view().quicklookRange],value=Number(e.target.value);
+  range[index]=index===0?Math.min(value,range[1]):Math.max(value,range[0]);
+  view().quicklookRange=normalizeQuicklookRange(range);render();persist();
+});
+for(const [id,index] of [['quicklook-filter-min',0],['quicklook-filter-max',1]])$('#'+id).addEventListener('change',e=>{
+  const other=$(index===0?'#quicklook-filter-max':'#quicklook-filter-min');
+  if(index===0&&Number(e.target.value)>Number(other.value)||index===1&&Number(e.target.value)<Number(other.value))other.value=e.target.value;
+});
 $('#density-button').addEventListener('click',()=>{state.density=state.density==='standard'?'compact':'standard';syncControls();if(inCloud()&&data)renderQuicklook();persist();});
 $('#profile-form').addEventListener('submit',e=>{
   e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#settings'));return;}
@@ -613,8 +651,10 @@ $('#filter-form').addEventListener('submit',e=>{
   const catalog=state.page==='items',events=$(catalog?'#catalog-events':'#include-events').checked;
   allViews().forEach(v=>v.includeEvents=events);
   if(catalog){catalogView().category=$('#catalog-category').value;catalogView().availability=$('#catalog-availability').value;catalogPage=1;}
-  else {view().category=$('#category').value;if(['weapon','melee','mods','armor','ammo','keys','medical','gear','containers'].includes(view().category))view().lootScope='all';
-    view().criteria={minSlot:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};}
+  else {
+    if(inQuicklook()){view().quicklookTypes=$$('[data-quicklook-type]').filter(el=>el.checked).map(el=>el.dataset.quicklookType);view().quicklookRange=normalizeQuicklookRange([Number($('#quicklook-filter-min').value),Number($('#quicklook-filter-max').value)]);}
+    else view().category=$('#category').value;
+    view().criteria={minSlot:inQuicklook()?criteria().minSlot:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};}
   animateNext=true;syncControls();rebuild();render();persist();closePanel($('#filters'),'save');
 });
 $('#clear-filters').addEventListener('click',()=>{allViews().forEach(v=>v.includeEvents=false);if(state.page==='items'){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();rebuild();render();persist();}else resetCurrentFilters();closePanel($('#filters'));});

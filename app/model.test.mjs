@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -309,15 +309,16 @@ test('a seven-day rise remains red after a plateau and does not require thirty d
   assert.equal(analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now).short,false);
 });
 
-test('scavenging contains only barter, provisions and intelligence without removing other catalog items',()=>{
+test('quicklook defaults include five loot types and keep all catalog items',()=>{
   const objects=[item('mod',{category:'mods'}),item('food',{category:'food'}),item('barter',{category:'barter'}),
     item('intel',{category:'barter'}),item('intel-other',{category:'other',name:'情报文件夹'}),
     item('poster',{category:'other',name:'情报海报',types:['poster']}),item('medical',{category:'medical'}),
-    item('document',{category:'other',name:'普通文件'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
+    item('ammo-box',{category:'ammo',types:['ammoBox']}),item('ammo',{category:'ammo',types:['ammo']}),item('document',{category:'other',name:'普通文件'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
   const rows=collectLoot(dataset(objects),{},now);
-  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['barter','food','intel','intel-other']);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['ammo-box','barter','food','intel','intel-other','medical']);
   for(const id of ['mod','poster','medical','key','gun'])assert.equal(rows.some(r=>r.id===id),true);
   assert.equal(isScavengingItem({category:'barter',isPreset:true}),false);
+  assert.equal(isScavengingItem({category:'weapon',isPreset:true,default:true},['weapon']),true);
   assert.equal(isScavengingItem({category:'barter',currencyOnly:true}),false);
   const excluded=[
     item('camera',{category:'barter',sourceCategories:['5447e0e74bdc2d3c308b4567']}),
@@ -326,6 +327,14 @@ test('scavenging contains only barter, provisions and intelligence without remov
     item('map-localized',{category:'barter',name:'工厂地图'})
   ];
   assert.ok(excluded.every(i=>!isScavengingItem(i)));
+  assert.ok(excluded.every(i=>!isScavengingItem(i,Object.keys(SCAVENGING_CATEGORIES))));
+  assert.equal(isScavengingItem(objects.find(i=>i.id==='mod'),['mods']),true);
+  assert.equal(isScavengingItem(objects.find(i=>i.id==='ammo'),['ammoBox']),false);
+  assert.equal(isScavengingItem(objects.find(i=>i.id==='ammo-box'),['ammo']),false);
+  assert.equal(isScavengingItem(objects.find(i=>i.id==='medical'),[]),false);
+  assert.equal(scavengingCategory(item('flash-drive',{category:'barter',sourceCategories:['5448ecbe4bdc2d60728b4568']})),'intelligence');
+  assert.deepEqual(normalizeScavengingCategories(['medical','medical','bad']),['medical']);
+  assert.deepEqual(normalizeScavengingCategories([]),[]);
   assert.equal(collectCatalog(dataset(excluded),{},now).length,excluded.length);
   // Special-slot support alone is not the special-items category: paracord remains loot.
   assert.equal(isScavengingItem(item('paracord',{category:'barter',types:['barter','specialSlot'],sourceCategories:['590c745b86f7743cc433c5f2']})),true);

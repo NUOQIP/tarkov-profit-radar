@@ -75,15 +75,31 @@ export function resolveTradingProfile(input,data,reset=false) {
   if(reset)p.excludedStations=[];
   return p;
 }
-// A browsing scope, not a claim about spawn probability or a particular map.
-export function isScavengingItem(item) {
-  if(item.isPreset || item.currencyOnly || item.types?.includes('poster')) return false;
+export const SCAVENGING_CATEGORIES = {
+  barter:'交换用品',food:'饮食',intelligence:'情报',ammoBox:'弹药包',medical:'医疗物品',
+  weapon:'武器',melee:'近战武器',mods:'武器配件',armor:'护甲 / 头盔',ammo:'弹药 / 投掷物',
+  keys:'钥匙 / 门卡',gear:'背包 / 装备',containers:'容器',poster:'海报',other:'其他'
+};
+export const DEFAULT_SCAVENGING_CATEGORIES = ['barter','food','intelligence','ammoBox','medical'];
+export function normalizeScavengingCategories(selected) {
+  return Array.isArray(selected)?[...new Set(selected.filter(k=>Object.hasOwn(SCAVENGING_CATEGORIES,k)))]:[...DEFAULT_SCAVENGING_CATEGORIES];
+}
+// Disjoint browsing categories. Special equipment and maps stay outside quicklook.
+export function scavengingCategory(item) {
+  if((item.isPreset && !item.default) || item.currencyOnly) return null;
   const sourceCategories=item.sourceCategories||[];
   const special=sourceCategories.includes('5447e0e74bdc2d3c308b4567');
   const map=sourceCategories.includes('567849dd4bdc2d150f8b456e') || /(?:^|-)maps?(?:-|$)/i.test(item.slug||'') || /地图/.test(item.name||'');
-  if(special||map)return false;
-  return ['barter','food'].includes(item.category) ||
-    (item.category==='other' && (item.types?.includes('intelligence') || /情报|intelligence/i.test([item.name,item.english,item.slug].join(' '))));
+  if(special||map)return null;
+  if(item.types?.includes('ammoBox'))return 'ammoBox';
+  if(item.types?.includes('poster'))return 'poster';
+  if(sourceCategories.includes('5448ecbe4bdc2d60728b4568') || item.types?.includes('intelligence') ||
+    (['barter','other'].includes(item.category)&&/情报|intelligence/i.test([item.name,item.english,item.slug].join(' '))))return 'intelligence';
+  return Object.hasOwn(SCAVENGING_CATEGORIES,item.category)?item.category:'other';
+}
+export function isScavengingItem(item, selected = DEFAULT_SCAVENGING_CATEGORIES) {
+  const category=scavengingCategory(item);
+  return category!==null&&selected.includes(category);
 }
 export function categoryOf(item, items = {}) {
   const basis = item.properties?.baseItem ? items[item.properties.baseItem] || item : item;
