@@ -399,51 +399,56 @@ const median = a => {
   const s = [...a].sort((x, y) => x - y); if (!s.length) return null;
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 };
-export function analyzeHistory(points, item, data, options = {}, now = Date.now()) {
-  const day = 86400000;
-  const current = { priceMin: item.price, timestamp: Date.parse(item.scan), offerCount: item.offers };
-  const clean = [...new Map([...(points || []), current].filter(p => positive(p.priceMin) && Number.isFinite(p.timestamp) && p.timestamp <= now + 60000)
-    .map(p => [p.timestamp, p])).values()].sort((a, b) => a.timestamp - b.timestamp);
-  const baselineRows = clean.filter(p => p.timestamp >= now - 8 * day && p.timestamp < now - day && p.offerCount >= 3);
-  const days = new Set(baselineRows.map(p => Math.floor(p.timestamp / day)));
-  const base = median(baselineRows.map(p => p.priceMin));
-  const priorDay = median(clean.filter(p => p.timestamp >= now - 30 * 3600000 && p.timestamp <= now - 18 * 3600000).map(p => p.priceMin));
-  const referenceRows=baselineRows.filter(p=>p.timestamp<now-6*day);
-  const reference7=median(referenceRows.map(p=>p.priceMin));
-  const change7=reference7?item.price/reference7-1:null;
-  const recent = clean.filter(p => p.timestamp >= now - 4 * FRESH_MS && p.offerCount >= 3);
-  const confirmed=recent.filter(p=>reference7 && p.priceMin>=reference7*1.2);
-  const independent=confirmed.length>=2 && confirmed.at(-1).timestamp-confirmed[0].timestamp>=15*60000;
-  let short = false, premium = base ? item.price / base - 1 : null;
-  let extraNet=null;
-  if (days.size >= 6 && referenceRows.length >= 2 && independent && item.offers>=3 && quoteStatus(item, data, options, now) === '可参考') {
-    const baseFee = fleaFee(feeBasePrice(item,data), reference7, data.flea, options.intelligence || 0, options.management || 0);
-    const currentFee = fleaFee(feeBasePrice(item,data), item.price, data.flea, options.intelligence || 0, options.management || 0);
-    if(baseFee!==null&&currentFee!==null)extraNet=(item.price-currentFee)-(reference7-baseFee);
-    short = extraNet!==null && change7 >= .2 && extraNet>0 && extraNet>=Math.max(0,reference7-baseFee)*.1 &&
-      recent.slice(-2).every(p => p.priceMin >= reference7*1.2);
-  }
-  const completeDay = Math.floor(now / day) * day;
-  const daily = new Map();
-  for(const p of clean) if(p.timestamp>=completeDay-30*day && p.timestamp<completeDay && p.offerCount>=3) {
+function cleanHistory(points,item,now) {
+  const current={priceMin:item.price,timestamp:Date.parse(item.scan),offerCount:item.offers};
+  return [...new Map([...(points||[]),current].filter(p=>positive(p.priceMin)&&Number.isFinite(p.timestamp)&&p.timestamp<=now+60000)
+    .map(p=>[p.timestamp,p])).values()].sort((a,b)=>a.timestamp-b.timestamp);
+}
+// Price-only evidence: user-specific fees are still calculated on the device.
+export function summarizeHistory(points,item,now=Date.now()) {
+  const day=86400000,clean=cleanHistory(points,item,now),completeDay=Math.floor(now/day)*day;
+  const baselineRows=clean.filter(p=>p.timestamp>=now-8*day&&p.timestamp<now-day&&p.offerCount>=3);
+  const referenceRows=baselineRows.filter(p=>p.timestamp<now-6*day),daily=new Map();
+  for(const p of clean)if(p.timestamp>=completeDay-30*day&&p.timestamp<completeDay&&p.offerCount>=3){
     const k=Math.floor(p.timestamp/day);if(!daily.has(k))daily.set(k,[]);daily.get(k).push(p.priceMin);
   }
-  const stackCount=options.stack==='full'?(item.stack||1):1;
-  const historicalSlots=[...daily.values()].map(list=>{
-    const price=median(list),fee=fleaFee(feeBasePrice(item,data),price,data.flea,options.intelligence||0,options.management||0,stackCount);
+  return {at:now,baseline:median(baselineRows.map(p=>p.priceMin)),days:new Set(baselineRows.map(p=>Math.floor(p.timestamp/day))).size,
+    reference7:median(referenceRows.map(p=>p.priceMin)),referenceCount:referenceRows.length,
+    priorDay:median(clean.filter(p=>p.timestamp>=now-30*3600000&&p.timestamp<=now-18*3600000).map(p=>p.priceMin)),
+    recent:clean.filter(p=>p.timestamp>=now-4*FRESH_MS&&p.offerCount>=3).map(p=>[p.timestamp,p.priceMin]),
+    daily:[...daily].map(([date,prices])=>[date,median(prices)])};
+}
+export function analyzeHistorySummary(summary,item,data,options={},now=Date.now()) {
+  const day=86400000,{baseline:base,priorDay,reference7,referenceCount,days}=summary;
+  const current=positive(item.price)&&item.offers>=3&&Date.parse(item.scan)<=now+60000?[[Date.parse(item.scan),item.price]]:[];
+  const recent=[...new Map([...(summary.recent||[]),...current]).entries()].filter(([t])=>t>=now-4*FRESH_MS&&t<=now+60000).sort((a,b)=>a[0]-b[0]);
+  const confirmed=recent.filter(([,price])=>reference7&&price>=reference7*1.2);
+  const independent=confirmed.length>=2&&confirmed.at(-1)[0]-confirmed[0][0]>=15*60000;
+  const evidenceFresh=now-summary.at<=FRESH_MS,change7=reference7?item.price/reference7-1:null;
+  let short=false,extraNet=null;
+  if(evidenceFresh&&days>=6&&referenceCount>=2&&independent&&item.offers>=3&&quoteStatus(item,data,options,now)==='可参考'){
+    const baseFee=fleaFee(feeBasePrice(item,data),reference7,data.flea,options.intelligence||0,options.management||0);
+    const currentFee=fleaFee(feeBasePrice(item,data),item.price,data.flea,options.intelligence||0,options.management||0);
+    if(baseFee!==null&&currentFee!==null)extraNet=(item.price-currentFee)-(reference7-baseFee);
+    short=extraNet!==null&&change7>=.2&&extraNet>0&&extraNet>=Math.max(0,reference7-baseFee)*.1&&recent.slice(-2).every(([,price])=>price>=reference7*1.2);
+  }
+  const stackCount=options.stack==='full'?(item.stack||1):1,today=Math.floor(now/day);
+  const historicalSlots=(summary.daily||[]).filter(([date])=>date>=today-30&&date<today).map(([,price])=>{
+    const fee=fleaFee(feeBasePrice(item,data),price,data.flea,options.intelligence||0,options.management||0,stackCount);
     return fee===null?null:(price*stackCount-fee)/(item.width*item.height);
   }).filter(Number.isFinite).sort((a,b)=>a-b);
-  const stableDays=historicalSlots.filter(n=>n>=LONG_TERM_SLOT_MIN).length;
-  const lowerQuartile=historicalSlots[Math.floor(historicalSlots.length*.25)] ?? null;
+  const stableDays=historicalSlots.filter(n=>n>=LONG_TERM_SLOT_MIN).length,lowerQuartile=historicalSlots[Math.floor(historicalSlots.length*.25)]??null;
   const currentFee=fleaFee(feeBasePrice(item,data),item.price,data.flea,options.intelligence||0,options.management||0,stackCount);
   const currentSlot=currentFee===null?0:(item.price*stackCount-currentFee)/(item.width*item.height);
-  const long=historicalSlots.length>=24 && stableDays/historicalSlots.length>=.8 && lowerQuartile>=LONG_TERM_SLOT_MIN && currentSlot>=LONG_TERM_SLOT_MIN &&
-    ['可参考','报价延迟'].includes(quoteStatus(item,data,{...options,allowDelayed:true},now)) && !item.excluded;
-  return { short, long, baseline: base, premium, reference7,change7,extraNet,priorDay, change24:priorDay?item.price/priorDay-1:null, days: days.size, confirmations: recent.length,
-    reason: days.size < 6 || referenceRows.length<2 ? '7日历史覆盖不足' : !independent ? '尚无两个间隔15分钟的近期高价快照' : short ? '比约7日前涨价至少20%，税后增收已确认' : '未满足7日急涨条件',
-    longDays:historicalSlots.length, lowerQuartile, longMedian:median(historicalSlots),
-    longReason: long ? '30日价格按现行费率回算：至少24日有效，至少80%日期每格净值达到3万。不是历史实际成交利润。' : `30日高值观察 ${historicalSlots.length}/30 天；当前尚未满足每格3万的稳定高值条件。`,
-    points: clean.filter(p => p.timestamp >= now - 30 * day).slice(-600) };
+  const long=historicalSlots.length>=24&&stableDays/historicalSlots.length>=.8&&lowerQuartile>=LONG_TERM_SLOT_MIN&&currentSlot>=LONG_TERM_SLOT_MIN&&
+    ['可参考','报价延迟'].includes(quoteStatus(item,data,{...options,allowDelayed:true},now))&&!item.excluded;
+  return {short,long,baseline:base,premium:base?item.price/base-1:null,reference7,change7,extraNet,priorDay,change24:priorDay?item.price/priorDay-1:null,days,confirmations:recent.length,
+    reason:days<6||referenceCount<2?'7日历史覆盖不足':!independent?'尚无两个间隔15分钟的近期高价快照':short?'比约7日前涨价至少20%，税后增收已确认':'未满足7日急涨条件',
+    longDays:historicalSlots.length,lowerQuartile,longMedian:median(historicalSlots),
+    longReason:long?'30日价格按现行费率回算：至少24日有效，至少80%日期每格净值达到3万。不是历史实际成交利润。':`30日高值观察 ${historicalSlots.length}/30 天；当前尚未满足每格3万的稳定高值条件。`,points:[]};
+}
+export function analyzeHistory(points,item,data,options={},now=Date.now()) {
+  return {...analyzeHistorySummary(summarizeHistory(points,item,now),item,data,options,now),points:cleanHistory(points,item,now).filter(p=>p.timestamp>=now-30*86400000).slice(-600)};
 }
 export function scenario(row,data,options={},price=row.item.price) {
   if(!positive(price)||row.item.types.includes('noFlea')||!data.flea.enabled) return null;

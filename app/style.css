@@ -245,3 +245,31 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 @media(max-width:540px){.quicklook-rangebar{grid-template-columns:115px minmax(0,1fr);column-gap:15px;padding:7px 9px 8px}.range-heading{min-width:0}.range-heading output{font-size:12px}.range-presets{gap:5px}#quicklook-rangebar .quicklook-preset{gap:5px;padding:6px 5px;min-height:38px}#quicklook-rangebar .quicklook-preset>strong{font-size:10px;letter-spacing:0}#quicklook-rangebar .preset-symbol,#quicklook-rangebar .preset-symbol svg{width:14px;height:16px}#quicklook-rangebar .preset-status{width:12px;height:12px;margin:0}#quicklook-rangebar .preset-status svg{width:8px;height:8px}.range-ticks>span:nth-child(3){visibility:hidden}}
 @media(max-width:360px){.quicklook-rangebar{grid-template-columns:108px minmax(0,1fr);column-gap:10px}#quicklook-rangebar .quicklook-preset{gap:4px;padding-left:3px;padding-right:3px}#quicklook-rangebar .quicklook-preset>strong{font-size:9px}}
 @media(prefers-reduced-motion:reduce){#quicklook-rangebar .quicklook-preset,#quicklook-rangebar .quicklook-preset::before,#quicklook-rangebar .preset-symbol,#quicklook-rangebar .preset-status{transition:none}#quicklook-rangebar .quicklook-preset[aria-pressed=true] .preset-check{animation:none}#quicklook-rangebar .quicklook-preset:hover,#quicklook-rangebar .quicklook-preset:hover .preset-symbol{transform:none}}
+/* A searched stash reveals the prepared market in one pass. */
+.market-stage{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;isolation:isolate}
+.market-loader{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;background:radial-gradient(ellipse at 50% 42%,color-mix(in srgb,var(--gold) 5%,transparent),transparent 62%),var(--canvas);overflow:hidden}
+body:not([data-loading=true]) .market-loader{display:none}
+body[data-loading=true] .market-stage>main{visibility:hidden;pointer-events:none}
+.market-loader h2{font-size:17px;font-weight:600;letter-spacing:1.5px;margin:0;color:var(--ink)}
+.loader-eyebrow{font:9px Bahnschrift,sans-serif;letter-spacing:3px;color:var(--gold);margin-top:10px}
+.loot-loader-art{position:relative;width:218px;height:178px;display:grid;place-items:center}
+.loader-crate{position:relative;width:174px;padding:22px 12px 12px;background:color-mix(in srgb,var(--ink) 4%,var(--panel));border:1px solid color-mix(in srgb,var(--ink) 23%,transparent);box-shadow:7px 7px 0 color-mix(in srgb,var(--ink) 4%,transparent);transform:perspective(500px) rotateX(12deg) rotateZ(-4deg);overflow:hidden}
+.crate-stamp{position:absolute;top:5px;left:12px;font:8px Bahnschrift,sans-serif;letter-spacing:2px;color:var(--muted)}
+.crate-slots{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.loot-cell{height:43px;position:relative;border:1px solid var(--line);background:color-mix(in srgb,var(--gold) 3%,transparent);display:grid;place-items:center;animation:stash-found 3.6s ease infinite}
+.loot-cell::before,.loot-cell::after{content:"";display:block;position:absolute;background:var(--gold);opacity:.7}
+.cell-ammo::before{width:5px;height:23px;border-radius:3px 3px 1px 1px;box-shadow:8px 0 var(--gold);transform:rotate(20deg)}
+.cell-med{animation-delay:.35s}.cell-med::before{width:24px;height:20px;border-radius:3px;background:#a47870}.cell-med::after{width:12px;height:12px;background:#e0ded0;clip-path:polygon(35% 0,65% 0,65% 35%,100% 35%,100% 65%,65% 65%,65% 100%,35% 100%,35% 65%,0 65%,0 35%,35% 35%)}
+.cell-key{animation-delay:.7s}.cell-key::before{width:11px;height:11px;border:3px solid var(--gold);background:transparent;border-radius:50%;top:10px;left:10px}.cell-key::after{height:5px;width:17px;transform:rotate(40deg);left:20px;top:25px}
+.cell-cash{animation-delay:1.05s}.cell-cash::before{width:27px;height:16px;background:#92a08b;transform:rotate(-12deg);box-shadow:0 3px 0 #53644d}.cell-cash::after{width:6px;height:18px;background:#bdc1ac;transform:rotate(-12deg)}
+.cell-chip{animation-delay:1.4s}.cell-chip::before{width:20px;height:22px;background:#687b78;border:3px dashed #afae95}.cell-chip::after{width:9px;height:11px;background:#273335}
+.cell-intel{animation-delay:1.75s}.cell-intel::before{width:25px;height:21px;background:#b3a077;clip-path:polygon(0 0,45% 0,52% 15%,100% 15%,100% 100%,0 100%)}
+.crate-scan{position:absolute;left:0;right:0;height:28px;background:linear-gradient(transparent,#e6c9811c);border-bottom:1px solid #e6c98180;animation:stash-scan 3.6s linear infinite}
+.loader-corners{position:absolute;inset:0;background:linear-gradient(var(--gold),var(--gold)) 0 0/15px 1px no-repeat,linear-gradient(var(--gold),var(--gold)) 0 0/1px 15px no-repeat,linear-gradient(var(--gold),var(--gold)) 100% 100%/15px 1px no-repeat,linear-gradient(var(--gold),var(--gold)) 100% 100%/1px 15px no-repeat;opacity:.5}
+.loader-coordinate{position:absolute;bottom:-12px;font:8px Bahnschrift,sans-serif;letter-spacing:2px;color:var(--muted)}
+.loader-steps{display:flex;gap:17px;font-size:10px;color:var(--muted);margin-top:5px}.loader-steps span{padding-top:8px;border-top:2px solid var(--line)}.loader-steps .current{color:var(--gold);border-color:var(--gold)}.loader-steps .done{color:var(--ink);border-color:var(--ink)}
+.market-loader.failed .crate-scan{display:none}.market-loader.failed .loot-cell{animation:none}.market-loader button{padding:8px 18px;background:var(--gold);color:var(--canvas)}
+@keyframes stash-scan{from{top:-30px}to{top:100%}}
+@keyframes stash-found{0%,12%,100%{opacity:.18;transform:scale(.94)}24%,82%{opacity:1;transform:scale(1);border-color:color-mix(in srgb,var(--gold) 40%,transparent)}}
+@media(max-height:650px){.loot-loader-art{transform:scale(.75);height:133px}.market-loader{gap:8px}.market-loader h2{font-size:15px}}
+@media(prefers-reduced-motion:reduce){.loot-cell,.crate-scan{animation:none}.crate-scan{display:none}}

@@ -1,8 +1,9 @@
-import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, isScavengingItem, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
+import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, isScavengingItem, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
+import { DASHBOARD_VERSION, compactSignals, makeDashboard } from './dashboard.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
   set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
-}(), inflight=new WeakMap();
+}(), inflight=new WeakMap(), encodedDashboards=new WeakMap(), dashboardReadAt=new WeakMap();
 const keyFor=(store,key)=>`${store.namespace}:${key}`;
 async function once(store,key,fn) {
   // R2 stores are created per request. Do not share an in-flight I/O promise across
@@ -51,8 +52,8 @@ export async function snapshot(store,market) {
     if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&prior.imageVersion===1&&prior.categoryMetadataVersion===1&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
     try{
       const parts={},names=['items','items_zh','items_en','traders','hideout','barters','crafts','tasks','tasks_zh'];
-      for(let index=0;index<names.length;index+=3){
-        await Promise.all(names.slice(index,index+3).map(async name=>{
+      for(let index=0;index<names.length;index+=6){
+        await Promise.all(names.slice(index,index+6).map(async name=>{
           const age=['items','traders','barters','crafts'].includes(name)?5*MINUTE:12*60*MINUTE;
           parts[name]=await cachedSource(store,market,name,age);
         }));
@@ -131,17 +132,18 @@ export async function history(store,market,id) {
 export async function scanSignals(store,data,limit=12) {
   const key=`signals/${data.market}.json`,memoryKey=keyFor(store,key);
   return once(store,memoryKey,async()=>{
-    const book=await store.read(key)||{entries:{},cursor:0,checkedAt:null};
+    const book=compactSignals(await store.read(key),data);
     const candidates=collectLoot(data,{includeEvents:true}).filter(r=>['可参考','报价延迟'].includes(r.status)&&(r.slotValue>=20000||r.item.change48>=10));
     const rising=[...candidates].filter(r=>r.status==='可参考'&&r.item.change48>=10).sort((a,b)=>b.item.change48-a.item.change48);
     const priority=[...rising.slice(0,4),...candidates.filter(r=>isScavengingItem(r.item)).slice(0,4),...candidates.slice(0,2)];
     const freshNeeded=r=>!book.entries[r.item.id]||Date.now()-book.entries[r.item.id].at>60*MINUTE;
     const unseen=[...new Map([...priority.filter(freshNeeded).slice(0,6),...candidates.filter(r=>!book.entries[r.item.id]),...rising.filter(freshNeeded),...candidates.filter(freshNeeded)].map(r=>[r.item.id,r])).values()].slice(0,limit);
-    for(let index=0;index<unseen.length;index+=3){
-      await Promise.all(unseen.slice(index,index+3).map(async r=>{
+    for(let index=0;index<unseen.length;index+=6){
+      await Promise.all(unseen.slice(index,index+6).map(async r=>{
         try{
           const result=await history(store,data.market,r.item.id);
-          book.entries[r.item.id]={at:result.at,points:result.points};
+          const entry=compactSignals({entries:{[r.item.id]:result}},data).entries[r.item.id];
+          if(entry)book.entries[r.item.id]=entry;
         }catch{ /* A missing history never produces a substitute trend. */ }
       }));
     }
@@ -156,7 +158,7 @@ export async function scanSignals(store,data,limit=12) {
 export async function digest(store,market,origin) {
   const data=await snapshot(store,market),book=await store.read(`signals/${market}.json`),profile=normalizeProfile(),rows=[...collectFlips(data,profile),...collectCrafts(data,profile)].sort((a,b)=>b.profit-a.profit);
   const items=rows.slice(0,10).map(r=>{
-    const h=book?.entries[r.item.valuationId||r.item.id],s=h?analyzeHistory(h.points,r.item,data,profile):null;
+    const h=book?.entries[r.item.valuationId||r.item.id],s=h?.summary?analyzeHistorySummary(h.summary,r.item,data,profile):h?.points?analyzeHistory(h.points,r.item,data,profile):null;
     return {id:r.id,itemId:r.item.id,name:r.item.name,type:r.kind,profit:Math.round(r.profit),hourly:r.hourly?Math.round(r.hourly):null,
       basis:r.kind==='craft'&&r.fuel===null?'before-fuel':'after-fee',cost:Math.round(r.purchase),market,short:isShortOpportunity(r,s),
       quoteAt:r.item.scan,conditions:{trader:r.trader?.name,level:r.level,task:r.task||null,station:r.station?.name},
@@ -165,25 +167,84 @@ export async function digest(store,market,origin) {
   return {version:1,market,generatedAt:data.fetchedAt,source:data.source,delivery:'read-only; no QQ messages sent',items,
     text:[`塔科夫赚钱监控 · ${MARKETS[market]}`,...items.slice(0,5).map(i=>`${i.name} · 预计${i.basis==='before-fuel'?'扣燃料前':''}收益 ₽${i.profit.toLocaleString('zh-CN')}`),`${origin}/?market=${market}`].join('\n')};
 }
-export async function handleApi(request,store) {
+const validDashboard=value=>value?.version===DASHBOARD_VERSION&&value.modelVersion===MODEL_VERSION;
+async function saveDashboard(store,data,book) {
+  const result=makeDashboard(data,book,await profitHistory(store,data.market));
+  await store.write(`dashboard/${data.market}.json`,result);
+  dashboardReadAt.set(result,Date.now());
+  cache.set(keyFor(store,`dashboard/${data.market}`),result);return result;
+}
+export async function collectMarket(store,market,limit=18) {
+  return once(store,`collect/${market}`,async()=>{
+    const data=await snapshot(store,market);
+    // Publish current quotes with available evidence before slow upstream scans.
+    await saveDashboard(store,data,await store.read(`signals/${market}.json`));
+    const book=await scanSignals(store,data,limit);
+    return saveDashboard(store,data,book);
+  });
+}
+async function refreshInBackground(store,market) {
+  // R2-backed lease coalesces visitors across Worker isolates. Expiry recovers crashes.
+  let acquired=false;const key=`refresh-lease/${market}.json`,now=Date.now();
+  const claim=old=>{acquired=false;if(old&&now-old.at<5*MINUTE)return null;acquired=true;return {at:now};};
+  if(store.update)await store.update(key,claim);
+  else {const value=claim(await store.read(key));if(value)await store.write(key,value);}
+  if(acquired)await collectMarket(store,market,12);
+}
+export async function dashboard(store,market,waitUntil) {
+  const key=`dashboard/${market}.json`,memoryKey=keyFor(store,`dashboard/${market}`);
+  return once(store,`read/${key}`,async()=>{
+    let ready=cache.get(memoryKey);
+    // Other Worker isolates can publish a newer bundle. Recheck shared storage
+    // periodically instead of retaining an isolate's first bundle indefinitely.
+    if(!ready||Date.now()-(dashboardReadAt.get(ready)||0)>=30000){
+      try{ready=(await store.read(key))||ready;}
+      catch(error){if(!validDashboard(ready))throw error;}
+      if(ready)dashboardReadAt.set(ready,Date.now());
+    }
+    if(!validDashboard(ready)){
+      // Upgrade existing caches without making the visitor wait for new histories.
+      const cached=await store.read(`snapshot/${market}.json`);
+      const data=cached?.version===2&&cached.modelVersion===MODEL_VERSION?cached:await snapshot(store,market);
+      ready=await saveDashboard(store,data,await store.read(`signals/${market}.json`));
+    }
+    cache.set(memoryKey,ready);
+    if(waitUntil&&(Date.now()-Date.parse(ready.snapshot.fetchedAt)>=5*MINUTE||Date.now()-Date.parse(ready.preparedAt)>=5*MINUTE)){
+      waitUntil(refreshInBackground(store,market).catch(()=>{}));
+    }
+    return ready;
+  });
+}
+export async function handleApi(request,store,context={}) {
   const url=new URL(request.url),market=url.searchParams.get('market')||'pve';
-  const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+  const json=(value,status=200,headers={})=>{
+    const isDashboard=Boolean(value?.snapshot&&value.version===DASHBOARD_VERSION);
+    let body=isDashboard?encodedDashboards.get(value):null;
+    if(!body){body=JSON.stringify(value);if(isDashboard)encodedDashboards.set(value,body);}
+    return new Response(body,{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
+  };
   if(request.method!=='GET')return json({error:'只支持读取'},405);
   if(!Object.hasOwn(MARKETS,market))return json({error:'未知市场'},400);
   try{
-    if(url.pathname==='/api/snapshot')return json(await snapshot(store,market));
+    if(url.pathname==='/api/dashboard'){
+      const ready=await dashboard(store,market,context.waitUntil),etag=`"dashboard-${market}-${ready.preparedAt}-${DASHBOARD_VERSION}"`;
+      const headers={'ETag':etag,'Cache-Control':'public, max-age=30, stale-while-revalidate=60'};
+      if(request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers});
+      return json(ready,200,headers);
+    }
+    if(url.pathname==='/api/snapshot')return json((await dashboard(store,market,context.waitUntil)).snapshot);
     if(url.pathname==='/api/history'){
       const id=url.searchParams.get('id');if(!/^[0-9a-f]{24}$/.test(id||''))return json({error:'物品 ID 无效'},400);
       return json(await history(store,market,id));
     }
-    if(url.pathname==='/api/signals')return json(await scanSignals(store,await snapshot(store,market)));
+    if(url.pathname==='/api/signals')return json((await dashboard(store,market,context.waitUntil)).signals);
     if(url.pathname==='/api/ledger')return json(await profitHistory(store,market));
-    if(url.pathname==='/api/feed')return json(await digest(store,market,url.origin));
     if(url.pathname==='/api/collect'){
-      const data=await snapshot(store,market),signals=await scanSignals(store,data,18);
-      return json({market,fetchedAt:data.fetchedAt,warning:data.warning||data.collectionWarning||null,historyChecked:signals.checked,historyTotal:signals.total});
+      await refreshInBackground(store,market);
+      const ready=await dashboard(store,market);
+      return json({market,fetchedAt:ready.snapshot.fetchedAt,warning:ready.snapshot.warning||null,historyChecked:ready.signals.checked,historyTotal:ready.signals.total});
     }
-    if(url.pathname==='/api/health')return json({ok:true,modelVersion:MODEL_VERSION,markets:Object.keys(MARKETS)});
+    if(url.pathname==='/api/health')return json({ok:true,service:'tarkov-profit-radar',modelVersion:MODEL_VERSION,markets:Object.keys(MARKETS)});
     return json({error:'接口不存在'},404);
   }catch(error){return json({error:error.message},502);}
 }
