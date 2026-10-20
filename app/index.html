@@ -22,22 +22,27 @@
       <button class="icon-button" id="pause" data-icon="pause" aria-label="暂停自动应用行情" title="暂停自动应用行情" aria-pressed="false"></button>
       <button class="icon-button wide-only" id="fullscreen" data-icon="expand" aria-label="全屏旁屏" title="全屏旁屏"></button>
       <button class="icon-button" id="theme" data-icon="moon" aria-label="切换深浅外观" title="切换深浅外观"></button>
-      <button class="settings-button" id="settings-button"><span data-icon="sliders"></span><span>我的条件</span></button>
+      <button class="settings-button" id="settings-button"><span data-icon="sliders"></span><span>计算设置</span></button>
     </div>
   </header>
   <div class="overview">
-    <nav class="workspace-nav" aria-label="功能"><button data-page="monitor" aria-pressed="true"><span data-icon="trend"></span>赚钱监控</button><button data-page="items" aria-pressed="false"><span data-icon="box"></span>物品一览</button></nav>
+    <nav class="workspace-nav" aria-label="功能"><button data-page="loot" aria-pressed="true"><span data-icon="backpack"></span>捡什么 · 卖什么</button><button data-page="flips" aria-pressed="false"><span data-icon="exchange"></span>商人倒货</button><button data-page="crafts" aria-pressed="false"><span data-icon="craft"></span>藏身处</button><button data-page="monitor" aria-pressed="false"><span data-icon="sliders"></span>自选大屏</button><button data-page="items" aria-pressed="false"><span data-icon="box"></span>物品一览</button></nav>
+  </div>
+  <div class="workspace-heading" id="workspace-heading"><div><span class="eyebrow" id="page-eyebrow">LOOT & SELL</span><h1 id="page-title">把背包留给更值钱的东西</h1><p id="page-description">最低价、均价与税后到手，一眼比较。</p></div><button id="layout-button"><span data-icon="sliders"></span>自定义布局</button></div>
+  <div class="layout-editor" id="layout-editor" hidden><div class="layout-editor-top"><strong>拼好你的旁屏</strong><span>拖动板块标题，或用箭头调整顺序</span><button id="layout-reset">恢复三列等宽</button><button id="layout-done">完成</button></div><div id="layout-controls"></div><div class="layout-options"><label>排列<select id="layout-arrangement"><option value="columns">横向并排</option><option value="stack">纵向排列</option></select></label><label><input type="checkbox" id="layout-compact">紧凑卡片</label></div></div>
+  <div class="overview-stats" id="overview-stats">
     <div><span class="overview-label">可估值物品</span><strong id="overview-loot">—</strong><span id="catalog-count" class="subtle">全品类覆盖</span></div>
     <div><span class="overview-label">正收益倒货</span><strong id="overview-flips">—</strong><span id="direct-count" class="subtle">直购 + 兑换</span></div>
-    <div><span class="overview-label">制作机会</span><strong id="overview-crafts">—</strong><span id="fuel-status" class="subtle">燃料待配置</span></div>
-    <div class="overview-source"><span class="live-dot"></span>tarkov.dev 行情<span class="source-divider"></span><button id="method-button">计算口径 <span data-icon="info"></span></button></div>
+    <div><span class="overview-label">制作机会</span><strong id="overview-crafts">—</strong><span id="fuel-status" class="subtle">按每批净利排序</span></div>
+    <div class="overview-source"><span class="live-dot"></span>tarkov.dev 行情<span class="source-divider"></span>行情每 5 分钟检查</div>
   </div>
   <div class="toolbar" id="monitor-toolbar">
     <label class="search"><span data-icon="search"></span><input id="search" type="search" aria-label="搜索物品、材料或设施" placeholder="物品、材料、简称…"><kbd>/</kbd></label>
     <select id="category" aria-label="物品分类"><option value="all">全部分类</option></select>
-    <div class="filter-tabs" aria-label="行情类型"><button data-filter="all" aria-pressed="true">全部</button><button data-filter="short" aria-pressed="false"><i class="legend-dot red"></i>短线</button><button data-filter="long" aria-pressed="false"><i class="legend-dot green"></i>长线</button><button data-filter="favorites" aria-pressed="false"><span data-icon="star"></span>收藏<span id="favorite-count"></span></button></div>
+    <div class="filter-tabs" aria-label="行情类型"><button data-filter="all" aria-pressed="true">全部</button><button data-filter="short" aria-pressed="false"><i class="legend-dot red"></i>7日急涨</button><button data-filter="long" aria-pressed="false"><i class="legend-dot green"></i>30日长线</button><button data-filter="favorites" aria-pressed="false"><span data-icon="star"></span>收藏<span id="favorite-count"></span></button></div>
     <div class="toolbar-right"><label class="event-toggle"><input id="include-events" type="checkbox"><span>活动限定</span></label><select id="stack" aria-label="堆叠数量"><option value="single">单件 / 单发</option><option value="full">满堆叠</option></select><button id="filter-button" class="filter-button"><span data-icon="filter"></span><span>筛选</span><i id="filter-active" hidden></i></button></div>
   </div>
+  <div class="context-toolbar" id="context-toolbar"><div class="scope-tabs" id="loot-scopes" aria-label="捡卖物品范围"><button data-loot-scope="scavenging" aria-pressed="true">跑刀杂物</button><button data-loot-scope="all" aria-pressed="false">全部物品</button><span>交换品 · 配件 · 饮食 · 医疗 · 情报 · 海报</span></div><label id="station-filter-label" hidden>制作设施<select id="station-filter"><option value="all">全部设施</option></select></label><button id="reset-visible-filters">重置当前页筛选</button></div>
   <div class="toolbar catalog-toolbar" id="catalog-toolbar" hidden>
     <label class="search"><span data-icon="search"></span><input id="catalog-search" type="search" aria-label="搜索物品一览" placeholder="中文、英文、简称或物品 ID…"><kbd>/</kbd></label>
     <select id="catalog-category" aria-label="一览物品分类"><option value="all">全部分类</option></select>
@@ -48,9 +53,9 @@
   <div id="warning" class="notice warning" role="alert" hidden></div>
   <div id="pending" class="notice pending" hidden><span><span data-icon="refresh"></span>有新行情，阅读位置已保留</span><button id="apply-pending">应用更新</button></div>
   <main class="columns" id="monitor-panel" aria-label="赚钱监控">
-    <section class="column loot-column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="backpack"></span><h1>捡什么 · 卖什么</h1><span class="count" id="loot-count">—</span></div><div class="column-sub"><span>单格净到手 <span data-icon="arrow-down"></span></span><span>卢布 ₽</span></div></div><div class="list" id="loot" tabindex="0" aria-label="拾取与出售，独立滚动"></div></section>
-    <section class="column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="exchange"></span><h2>商人倒货</h2><span class="count" id="flips-count">—</span></div><div class="column-sub"><span>每次预计净利润 <span data-icon="arrow-down"></span></span><select id="flip-type" aria-label="倒货类型"><option value="all">直购 + 兑换</option><option value="buy">只看直购</option><option value="barter">只看兑换</option></select></div></div><div class="list" id="flips" tabindex="0" aria-label="倒货，独立滚动"></div></section>
-    <section class="column"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="craft"></span><h2>藏身处制作</h2><span class="count" id="crafts-count">—</span></div><div class="column-sub"><span id="craft-basis">每小时收益 <span data-icon="arrow-down"></span></span><button id="fuel-button">设置燃料 <span data-icon="chevron"></span></button></div></div><div class="list" id="crafts" tabindex="0" aria-label="制作，独立滚动"></div></section>
+    <section class="column loot-column" data-module="loot"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="backpack"></span><h2>捡什么 · 卖什么</h2><span class="count" id="loot-count">—</span></div><div class="column-sub"><span>单格净到手 <span data-icon="arrow-down"></span></span><span>卢布 ₽</span></div></div><div class="list" id="loot" tabindex="0" aria-label="拾取与出售，独立滚动"></div></section>
+    <section class="column" data-module="flips"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="exchange"></span><h2>商人倒货</h2><span class="count" id="flips-count">—</span></div><div class="column-sub"><span>每次预计净利润 <span data-icon="arrow-down"></span></span><select id="flip-type" aria-label="倒货类型"><option value="all">直购 + 兑换</option><option value="buy">只看直购</option><option value="barter">只看兑换</option></select></div></div><div class="list" id="flips" tabindex="0" aria-label="倒货，独立滚动"></div></section>
+    <section class="column" data-module="crafts"><div class="column-head"><div class="column-title"><span class="column-symbol" data-icon="craft"></span><h2>藏身处制作</h2><span class="count" id="crafts-count">—</span></div><div class="column-sub"><span id="craft-basis">每批最终净利润 <span data-icon="arrow-down"></span></span><span>满设施 · 不计燃料</span></div></div><div class="list" id="crafts" tabindex="0" aria-label="制作，独立滚动"></div></section>
   </main>
   <main class="catalog-panel" id="catalog-panel" aria-labelledby="items-title" hidden>
     <div class="catalog-heading"><div><span class="column-symbol" data-icon="box"></span><h1 id="items-title">物品一览</h1><span class="count" id="items-count">—</span><span id="items-total" class="subtle"></span></div><button id="catalog-reset">重置筛选</button></div>
@@ -62,31 +67,26 @@
     </div>
     <div class="catalog-pagination"><span id="catalog-range" role="status">读取物品档案中</span><div><button id="catalog-prev" aria-label="上一页物品">上一页</button><span id="catalog-page">1 / 1</span><button id="catalog-next" aria-label="下一页物品">下一页</button></div></div>
   </main>
-  <footer><span id="coverage">正在核对物品、商人和配方</span><div><span class="legend-dot red"></span>短期涨价<span class="legend-dot green"></span>长期高值 / 稳定收益<button id="history-status">历史核验中</button><a href="https://tarkov.dev" target="_blank" rel="noreferrer">数据源 ↗</a></div></footer>
+  <footer><span id="coverage">正在核对物品、商人和配方</span><div><span class="legend-dot red"></span>7日急涨<span class="legend-dot green"></span>30日长线<button id="method-button">计算口径</button><button id="history-status">历史核验中</button><a href="https://tarkov.dev" target="_blank" rel="noreferrer">数据源 ↗</a></div></footer>
 </div>
 <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title"><div class="drawer-top"><span>物品与收益明细</span><button class="icon-button close-dialog" data-close="detail-dialog" data-icon="x" aria-label="关闭明细"></button></div><div id="detail-content"></div></dialog>
 <dialog id="settings" class="settings-dialog" aria-labelledby="settings-title">
   <form id="profile-form" method="dialog">
-    <div class="dialog-heading"><div><span class="eyebrow">PLAYER PROFILE</span><h2 id="settings-title">我的条件 <span id="profile-market"></span></h2></div><button value="cancel" class="icon-button" data-icon="x" aria-label="取消设置" formnovalidate></button></div>
+    <div class="dialog-heading"><div><span class="eyebrow">PLAYER PROFILE</span><h2 id="settings-title">计算设置 <span id="profile-market"></span></h2></div><button value="cancel" class="icon-button" data-icon="x" aria-label="取消设置" formnovalidate></button></div>
     <div class="settings-scroll">
-      <p class="help">按市场保存在这台设备。留空表示未确认，不会假设你已全部解锁。</p>
+      <div class="default-profile"><span data-icon="check"></span><div><strong>满设施 · 满商人 · 任务全完成</strong><p>情报中心 3 级，制作收益不计燃料运行成本。</p></div></div>
       <div class="settings-grid">
-        <label>角色等级<input id="player-level" type="number" min="1" max="79" placeholder="未配置"></label>
-        <label>情报中心<select id="intelligence"><option value="0">未建 / 0 级</option><option value="1">1 级</option><option value="2">2 级</option><option value="3">3 级</option></select></label>
+        <label>材料成本<select id="material-mode"><option value="buy">买齐材料再做</option><option value="owned">已有材料按可卖净值</option></select></label>
         <label>藏身处管理技能<input id="management" type="number" min="0" max="51" value="0"></label>
-        <label>材料成本<select id="material-mode"><option value="buy">新购材料成本</option><option value="owned">已有材料可卖净值</option></select></label>
-        <label>默认燃料分摊 · ₽/小时<input id="fuel" type="number" min="0" step="100" placeholder="未填：显示扣燃料前收益"></label>
-        <label>游戏版本<select id="edition"><option value="">未确认</option><option value="standard">Standard</option><option value="left_behind">Left Behind</option><option value="prepare_for_escape">Prepare for Escape</option><option value="edge_of_darkness">Edge of Darkness</option><option value="unheard_edition">The Unheard Edition</option><option value="eod_tue_edition">EOD → Unheard</option></select></label>
+        <label>游戏版本<select id="edition"><option value="">通用报价 / 未指定</option><option value="standard">Standard</option><option value="left_behind">Left Behind</option><option value="prepare_for_escape">Prepare for Escape</option><option value="edge_of_darkness">Edge of Darkness</option><option value="unheard_edition">The Unheard Edition</option><option value="eod_tue_edition">EOD → Unheard</option></select></label>
       </div>
-      <h3>商人忠诚度</h3><div class="settings-grid levels" id="trader-settings"></div>
-      <h3>设施等级与燃料分摊</h3><p class="help">单独分摊优先于默认值；填 0 表示该工位不承担额外燃料成本。</p><div id="station-settings" class="station-settings"></div>
-      <h3>已完成的解锁任务</h3><input id="task-search" type="search" placeholder="搜索建议涉及的任务" aria-label="搜索解锁任务"><div id="task-settings" class="task-settings"></div>
-      <h3>设置备份与接口</h3><div class="utility-actions"><button type="button" id="export-settings">导出设置</button><button type="button" id="import-settings">导入设置</button><button type="button" id="restore-hidden">恢复隐藏物品</button><button type="button" id="qq-preview">QQ 摘要接口</button></div><input type="file" id="import-file" accept="application/json,.json" hidden>
+      <p class="help">已有材料按直接出售能拿到的钱计算；工具只列首购资金，不按批重复扣除。收藏、布局和设置保存在这台设备。</p>
+      <h3>设置备份与接口</h3><div class="utility-actions"><button type="button" id="export-settings">导出设置</button><button type="button" id="import-settings">导入设置</button><button type="button" id="qq-preview">QQ 摘要接口</button></div><input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>
     <div class="dialog-actions"><button value="cancel" formnovalidate>取消</button><button value="save" class="primary">保存条件</button></div>
   </form>
 </dialog>
-<dialog id="filters" class="small-dialog" aria-labelledby="filters-title"><form method="dialog" id="filter-form"><div class="dialog-heading"><h2 id="filters-title">把机会缩小到适合你的范围</h2><button value="cancel" class="icon-button" data-icon="x" aria-label="取消筛选" formnovalidate></button></div><div class="settings-grid"><label>最低单格净值 · ₽<input id="min-slot" type="number" min="0" step="1000"></label><label>最低单次 / 每批收益 · ₽<input id="min-profit" type="number" min="0" step="1000"></label><label>最大材料 / 进货预算 · ₽<input id="budget" type="number" min="0" step="10000" placeholder="不限"></label><label>最长制作时间 · 小时<input id="max-hours" type="number" min="0" step=".5" placeholder="不限"></label></div><label class="check-line"><input id="only-executable" type="checkbox">仅显示条件已确认的倒货与制作</label><label class="check-line"><input id="fresh-only" type="checkbox">左列只显示一小时内的跳蚤报价</label><p class="help">商人库存仍需在游戏中确认。收藏筛选也保持单格价值倒序。</p><div class="dialog-actions"><button type="button" id="clear-filters">清除筛选</button><button value="save" class="primary">应用筛选</button></div></form></dialog>
+<dialog id="filters" class="small-dialog" aria-labelledby="filters-title"><form method="dialog" id="filter-form"><div class="dialog-heading"><h2 id="filters-title">把机会缩小到适合你的范围</h2><button value="cancel" class="icon-button" data-icon="x" aria-label="取消筛选" formnovalidate></button></div><div class="settings-grid"><label>最低单格净值 · ₽<input id="min-slot" type="number" min="0" step="1000"></label><label>最低单次 / 每批收益 · ₽<input id="min-profit" type="number" min="0" step="1000"></label><label>最大材料 / 进货预算 · ₽<input id="budget" type="number" min="0" step="10000" placeholder="不限"></label><label>最长制作时间 · 小时<input id="max-hours" type="number" min="0" step=".5" placeholder="不限"></label></div><label class="check-line"><input id="only-executable" type="checkbox">仅显示条件已确认的倒货与制作</label><label class="check-line"><input id="fresh-only" type="checkbox">捡卖只显示一小时内的跳蚤报价</label><p class="help">商人库存仍需在游戏中确认。收藏筛选也保持单格价值倒序。</p><div class="dialog-actions"><button type="button" id="clear-filters">清除筛选</button><button value="save" class="primary">应用筛选</button></div></form></dialog>
 <dialog id="info-dialog" class="small-dialog" aria-labelledby="info-title"><div class="dialog-heading"><h2 id="info-title">计算口径与数据状态</h2><button class="icon-button" data-close="info-dialog" data-icon="x" aria-label="关闭说明"></button></div><div id="info-content"></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 <script type="module" src="/radar.js"></script>

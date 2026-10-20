@@ -17,14 +17,15 @@ export const EVENT_IDS = new Set([
 const CURRENCY_IDS = new Set(['5449016a4bdc2d6f028b456f', '5696686a4bdc2da3298b456a', '569668774bdc2da2298b4568', '5d235b4d86f7742e017bc88a']);
 const positive = n => Number.isFinite(n) && n > 0;
 const values = x => Array.isArray(x) ? x : Object.values(x || {});
-export const MODEL_VERSION = '2026-10-21-v2';
+export const MODEL_VERSION = '2026-10-21-v3';
 export function normalizeProfile(input = {}) {
   if(!input || typeof input!=='object' || Array.isArray(input)) input={};
   const number = (value, min, max, fallback = null) => value === null || value === '' || value === undefined ? fallback : Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Number(value))) : fallback;
   const levels = (map, max) => Object.fromEntries(Object.entries(map || {}).filter(([k]) => /^[a-z0-9-]{1,64}$/i.test(k)).map(([k,v]) => [k, number(v,0,max,0)]));
   return {
-    playerLevel:number(input.playerLevel,1,79), intelligence:number(input.intelligence,0,3,0),
-    management:number(input.management,0,51,0), fuelPerHour:number(input.fuelPerHour,0,10000000),
+    maxProgress:input.maxProgress!==false,
+    playerLevel:number(input.playerLevel,1,79), intelligence:input.maxProgress!==false?3:number(input.intelligence,0,3,3),
+    management:number(input.management,0,51,0), fuelPerHour:0,
     traderLevels:levels(input.traderLevels,4), stationLevels:levels(input.stationLevels,10), stationFuel:levels(input.stationFuel,10000000),
     completedTasks:(Array.isArray(input.completedTasks)?input.completedTasks:[]).filter(x=>/^[0-9a-f]{24}$/.test(x)),
     ownedTools:(Array.isArray(input.ownedTools)?input.ownedTools:[]).filter(x=>/^[0-9a-f]{24}$/.test(x)),
@@ -32,6 +33,17 @@ export function normalizeProfile(input = {}) {
     materialMode:input.materialMode==='owned'?'owned':'buy', onlyExecutable:input.onlyExecutable===true, includeEvents:input.includeEvents===true,
     stack:input.stack==='full'?'full':'single'
   };
+}
+// A browsing scope, not a claim about spawn probability or a particular map.
+export function isScavengingItem(item) {
+  return !item.isPreset && !item.currencyOnly && (['barter','mods','food','medical'].includes(item.category) ||
+    (item.category==='other' && /海报|情报|文件|资料|poster|intelligence|information|document/i.test([item.name,item.english,item.slug].join(' '))));
+}
+export function normalizeLayout(input={}) {
+  const keys=['loot','flips','crafts'];
+  const order=[...new Set([...(Array.isArray(input?.order)?input.order:[]),...keys])].filter(k=>keys.includes(k));
+  return {order,widths:Object.fromEntries(keys.map(k=>[k,[1,2,3].includes(Number(input?.widths?.[k]))?Number(input.widths[k]):1])),
+    arrangement:input?.arrangement==='stack'?'stack':'columns',compact:input?.compact===true};
 }
 export function categoryOf(item, items = {}) {
   const basis = item.properties?.baseItem ? items[item.properties.baseItem] || item : item;
@@ -107,7 +119,7 @@ export function fleaFee(base, price, flea, intelligence = 0, management = 0, cou
 }
 export function quoteStatus(i, data, options = {}, now = Date.now()) {
   if (!data.flea.enabled || i.types.includes('noFlea')) return '禁售';
-  if (options.playerLevel && options.playerLevel < i.fleaLevel) return '等级不足';
+  if (!options.maxProgress && options.playerLevel && options.playerLevel < i.fleaLevel) return '等级不足';
   if (!positive(i.price) || !Number.isFinite(Date.parse(i.scan))) return '无报价';
   const age = now - Date.parse(i.scan);
   if (age > (options.allowDelayed ? 6 * FRESH_MS : FRESH_MS)) return '报价过期';
@@ -186,8 +198,9 @@ export function procurement(item, data, options = {}, now = Date.now()) {
   let best = ['可参考','报价延迟'].includes(status) ? {cost:Math.max(item.price,item.average || item.price),source:'跳蚤',flea:true,status} : null;
   for (const offer of item.buy || []) {
     if (!positive(offer.priceRUB) || !['RUB','USD','EUR'].includes(offer.currency)) continue;
-    if ((options.traderLevels?.[offer.trader] ?? -1) < offer.minTraderLevel) continue;
-    if (offer.taskUnlock && !options.completedTasks?.includes(offer.taskUnlock)) continue;
+    if (!options.maxProgress && (options.traderLevels?.[offer.trader] ?? -1) < offer.minTraderLevel) continue;
+    if (!options.maxProgress && offer.taskUnlock && !options.completedTasks?.includes(offer.taskUnlock)) continue;
+    if (offer.gameEditions?.length && !offer.gameEditions.includes(options.edition)) continue;
     if (!best || offer.priceRUB < best.cost) best={cost:offer.priceRUB,source:data.traders[offer.trader]?.name||'商人',flea:false};
   }
   return best;
@@ -212,16 +225,16 @@ function materials(reqs, data, options, now) {
 export function executionStatus(row, data, options = {}) {
   const missing = [];
   if(row.status==='报价延迟')missing.push('含延迟报价');
-  if (row.kind==='flip' || row.channel==='跳蚤') {
+  if (!options.maxProgress && (row.kind==='flip' || row.channel==='跳蚤')) {
     if (!options.playerLevel) missing.push('角色等级未配置');
     else if (options.playerLevel < row.item.fleaLevel) missing.push('跳蚤等级不足');
   }
-  if (row.kind==='flip' && (options.traderLevels?.[row.trader?.id] ?? -1) < row.level) missing.push(`${row.trader?.name || '商人'} LL${row.level}`);
-  if (row.kind==='craft' && (options.stationLevels?.[row.station?.id] ?? -1) < row.level) missing.push(`${row.station?.name || '设施'} Lv.${row.level}`);
-  if (row.task && !options.completedTasks?.includes(row.task)) missing.push('任务待确认');
+  if (!options.maxProgress && row.kind==='flip' && (options.traderLevels?.[row.trader?.id] ?? -1) < row.level) missing.push(`${row.trader?.name || '商人'} LL${row.level}`);
+  if (!options.maxProgress && row.kind==='craft' && (options.stationLevels?.[row.station?.id] ?? -1) < row.level) missing.push(`${row.station?.name || '设施'} Lv.${row.level}`);
+  if (!options.maxProgress && row.task && !options.completedTasks?.includes(row.task)) missing.push('任务待确认');
   if (row.editions?.length && !row.editions.includes(options.edition)) missing.push('版本资格待确认');
   if (row.recipe?.some(m=>m.tool && !options.ownedTools?.includes(m.item.id))) missing.push('工具待确认');
-  if (row.recipe?.some(m=>m.flea && (!options.playerLevel || options.playerLevel<m.item.fleaLevel))) missing.push('材料跳蚤等级待确认');
+  if (!options.maxProgress && row.recipe?.some(m=>m.flea && (!options.playerLevel || options.playerLevel<m.item.fleaLevel))) missing.push('材料跳蚤等级待确认');
   return { executable:missing.length===0, missing };
 }
 export function collectFlips(data, options = {}, now = Date.now()) {
@@ -270,10 +283,8 @@ export function collectCrafts(data, options = {}, now = Date.now()) {
     if (!positive(s.net)) continue;
     const purchase = recipe.reduce((sum, r) => sum + r.cost, 0), hours = c.duration / 3600;
     const margin = s.net - purchase;
-    const fuelRate=options.stationFuel?.[station?.id || c.station] ?? options.fuelPerHour;
-    const fuelKnown=Number.isFinite(fuelRate) && fuelRate>=0;
-    const fuel=fuelKnown ? hours*fuelRate : null;
-    const profit = fuelKnown ? margin - fuel : margin;
+    const fuel=0;
+    const profit = margin;
     if (!Number.isFinite(profit) || (!options.includeLosses && !positive(profit))) continue;
     const row={ id: 'craft-' + c.id, kind: 'craft', item, ...s, count, purchase, recipe, margin, fuel,
       profit, hourly: profit / hours, hours, seconds: c.duration, station, level: c.level, task: c.taskUnlock, editions:c.gameEditions || [] };
@@ -283,7 +294,7 @@ export function collectCrafts(data, options = {}, now = Date.now()) {
     row.execution=executionStatus(row,data,options);
     if (!options.onlyExecutable || row.execution.executable) rows.push(row);
   }
-  return rows.sort((a, b) => b.hourly - a.hourly);
+  return rows.sort((a, b) => b.profit - a.profit || b.hourly - a.hourly || a.id.localeCompare(b.id));
 }
 function oldestQuote(row){
   const stamps=[row.channel==='跳蚤'||row.kind==='flip'?row.item.scan:null,...(row.recipe||[]).filter(m=>!m.tool&&m.flea).map(m=>m.item.scan)].filter(s=>Number.isFinite(Date.parse(s)));
@@ -298,18 +309,24 @@ export function analyzeHistory(points, item, data, options = {}, now = Date.now(
   const current = { priceMin: item.price, timestamp: Date.parse(item.scan), offerCount: item.offers };
   const clean = [...new Map([...(points || []), current].filter(p => positive(p.priceMin) && Number.isFinite(p.timestamp) && p.timestamp <= now + 60000)
     .map(p => [p.timestamp, p])).values()].sort((a, b) => a.timestamp - b.timestamp);
-  const baselineRows = clean.filter(p => p.timestamp >= now - 8 * day && p.timestamp < now - day);
+  const baselineRows = clean.filter(p => p.timestamp >= now - 8 * day && p.timestamp < now - day && p.offerCount >= 3);
   const days = new Set(baselineRows.map(p => Math.floor(p.timestamp / day)));
   const base = median(baselineRows.map(p => p.priceMin));
   const priorDay = median(clean.filter(p => p.timestamp >= now - 30 * 3600000 && p.timestamp <= now - 18 * 3600000).map(p => p.priceMin));
+  const referenceRows=baselineRows.filter(p=>p.timestamp<now-6*day);
+  const reference7=median(referenceRows.map(p=>p.priceMin));
+  const change7=reference7?item.price/reference7-1:null;
   const recent = clean.filter(p => p.timestamp >= now - 4 * FRESH_MS && p.offerCount >= 3);
+  const confirmed=recent.filter(p=>reference7 && p.priceMin>=reference7*1.2);
+  const independent=confirmed.length>=2 && confirmed.at(-1).timestamp-confirmed[0].timestamp>=15*60000;
   let short = false, premium = base ? item.price / base - 1 : null;
-  if (days.size >= 6 && priorDay && recent.length >= 2 && quoteStatus(item, data, options, now) === '可参考') {
-    const baseFee = fleaFee(item.basePrice, base, data.flea, options.intelligence || 0, options.management || 0);
+  let extraNet=null;
+  if (days.size >= 6 && referenceRows.length >= 2 && independent && quoteStatus(item, data, options, now) === '可参考') {
+    const baseFee = fleaFee(item.basePrice, reference7, data.flea, options.intelligence || 0, options.management || 0);
     const currentFee = fleaFee(item.basePrice, item.price, data.flea, options.intelligence || 0, options.management || 0);
-    short = baseFee !== null && currentFee !== null && premium >= .2 && item.price / priorDay >= 1.1 &&
-      (item.price - currentFee) - (base - baseFee) >= 10000 &&
-      recent.slice(-2).every(p => p.priceMin >= base * 1.2 && p.priceMin >= priorDay * 1.1);
+    if(baseFee!==null&&currentFee!==null)extraNet=(item.price-currentFee)-(reference7-baseFee);
+    short = extraNet!==null && change7 >= .2 && extraNet>0 && extraNet>=Math.max(0,reference7-baseFee)*.1 &&
+      recent.slice(-2).every(p => p.priceMin >= reference7*1.2);
   }
   const completeDay = Math.floor(now / day) * day;
   const daily = new Map();
@@ -327,8 +344,8 @@ export function analyzeHistory(points, item, data, options = {}, now = Date.now(
   const currentSlot=currentFee===null?0:(item.price*stackCount-currentFee)/(item.width*item.height);
   const long=historicalSlots.length>=24 && stableDays/historicalSlots.length>=.8 && lowerQuartile>=20000 && currentSlot>=20000 &&
     ['可参考','报价延迟'].includes(quoteStatus(item,data,{...options,allowDelayed:true},now)) && !item.excluded;
-  return { short, long, baseline: base, premium, priorDay, change24:priorDay?item.price/priorDay-1:null, days: days.size, confirmations: recent.length,
-    reason: days.size < 6 ? '7日历史覆盖不足' : recent.length < 2 ? '缺少近4小时的两个独立报价快照' : short ? '近期涨价已确认' : '未满足短期飙升条件',
+  return { short, long, baseline: base, premium, reference7,change7,extraNet,priorDay, change24:priorDay?item.price/priorDay-1:null, days: days.size, confirmations: recent.length,
+    reason: days.size < 6 || referenceRows.length<2 ? '7日历史覆盖不足' : !independent ? '尚无两个间隔15分钟的近期高价快照' : short ? '比约7日前涨价至少20%，税后增收已确认' : '未满足7日急涨条件',
     longDays:historicalSlots.length, lowerQuartile, longMedian:median(historicalSlots),
     longReason: long ? '30日价格按现行费率回算：至少24日有效，至少80%日期每格净值达到2万。不是历史实际成交利润。' : `30日高值观察 ${historicalSlots.length}/30 天；当前尚未满足稳定高值条件。`,
     points: clean.filter(p => p.timestamp >= now - 30 * day).slice(-600) };
@@ -347,10 +364,8 @@ export function profitStability(records,row,data,options={},now=Date.now()) {
     row.recipe?.map(m=>[m.item.id,m.count,m.tool]) || [],row.level,row.task||null,row.editions||[]]);
   const today=new Date(now).toISOString().slice(0,10),cutoff=new Date(now-30*86400000).toISOString().slice(0,10);
   const matching=(records||[]).filter(d=>d.date>=cutoff&&d.date<today).map(d=>d.rows?.[row.id]).filter(r=>r?.version===expected && r.count>=4);
-  const fuelRate=options.stationFuel?.[row.station?.id] ?? options.fuelPerHour;
-  const incomplete=row.kind==='craft' && !Number.isFinite(fuelRate);
-  const values=matching.map(r=>r.min-(row.kind==='craft'?(fuelRate||0):0)).sort((a,b)=>a-b);
+  const values=matching.map(r=>r.min).sort((a,b)=>a-b);
   const lower=values[Math.floor(values.length*.25)]??null;
-  const long=options.materialMode!=='owned' && !incomplete && matching.length>=24 && values.filter(v=>v>0).length/values.length>=.8 && lower>10000;
-  return {long,days:matching.length,lower,reason:incomplete?'配置燃料后可判断长期净利':long?'至少24日配对成本记录支持稳定收益':`配对收益档案 ${matching.length}/30 天（每日至少4次）`};
+  const long=options.materialMode!=='owned' && matching.length>=24 && values.filter(v=>v>0).length/values.length>=.8 && lower>10000;
+  return {long,days:matching.length,lower,reason:long?'至少24日配对成本记录支持稳定收益':`配对收益档案 ${matching.length}/30 天（每日至少4次）`};
 }

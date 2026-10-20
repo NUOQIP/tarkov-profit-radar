@@ -1,4 +1,4 @@
-import { MARKETS, MODEL_VERSION, normalizeSnapshot, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus } from './model.mjs';
+import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, isScavengingItem, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus } from './model.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
   set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
@@ -76,7 +76,8 @@ function versionOf(row,data){
 }
 export async function recordDay(store,data,now=Date.now()) {
   const date=new Date(now).toISOString().slice(0,10),hour=Math.floor(now/3600000),key=`ledger/${data.market}/${date}.json`;
-  const all=[...collectFlips(data,{includeLosses:true,includeEvents:true},now),...collectCrafts(data,{includeLosses:true,includeEvents:true},now)];
+  const profile={...normalizeProfile(),includeLosses:true,includeEvents:true};
+  const all=[...collectFlips(data,profile,now),...collectCrafts(data,profile,now)];
   const change=oldDay=>{
   const prior=oldDay||{date,market:data.market,modelVersion:MODEL_VERSION,hours:[],rows:{}};
   if(prior.hours.includes(hour))return null;
@@ -84,7 +85,7 @@ export async function recordDay(store,data,now=Date.now()) {
   for(const row of all){
     if(quoteStatus(row.item,data,{},now)!=='可参考'&&row.channel==='跳蚤')continue;
     const version=versionOf(row,data),old=prior.rows[row.id];
-    const value=row.kind==='craft'?row.margin/row.hours:row.profit;
+    const value=row.profit;
     const entry=old?.version===version?old:{version,count:0,sum:0,min:Infinity,max:-Infinity,positive:0,kind:row.kind};
     entry.count++;entry.sum+=value;entry.min=Math.min(entry.min,value);entry.max=Math.max(entry.max,value);
     if(value>0)entry.positive++;
@@ -133,7 +134,7 @@ export async function scanSignals(store,data,limit=12) {
     const book=await store.read(key)||{entries:{},cursor:0,checkedAt:null};
     const candidates=collectLoot(data,{includeEvents:true}).filter(r=>['可参考','报价延迟'].includes(r.status)&&(r.slotValue>=20000||r.item.change48>=10));
     const rising=[...candidates].filter(r=>r.status==='可参考'&&r.item.change48>=10).sort((a,b)=>b.item.change48-a.item.change48);
-    const priority=[...candidates.slice(0,6),...rising.slice(0,6)];
+    const priority=[...rising.slice(0,4),...candidates.filter(r=>isScavengingItem(r.item)).slice(0,4),...candidates.slice(0,2)];
     const freshNeeded=r=>!book.entries[r.item.id]||Date.now()-book.entries[r.item.id].at>60*MINUTE;
     const unseen=[...new Map([...priority.filter(freshNeeded).slice(0,6),...candidates.filter(r=>!book.entries[r.item.id]),...rising.filter(freshNeeded),...candidates.filter(freshNeeded)].map(r=>[r.item.id,r])).values()].slice(0,limit);
     for(let index=0;index<unseen.length;index+=3){
@@ -153,9 +154,9 @@ export async function scanSignals(store,data,limit=12) {
   });
 }
 export async function digest(store,market,origin) {
-  const data=await snapshot(store,market),book=await store.read(`signals/${market}.json`),rows=[...collectFlips(data),...collectCrafts(data)];
+  const data=await snapshot(store,market),book=await store.read(`signals/${market}.json`),profile=normalizeProfile(),rows=[...collectFlips(data,profile),...collectCrafts(data,profile)].sort((a,b)=>b.profit-a.profit);
   const items=rows.slice(0,10).map(r=>{
-    const h=book?.entries[r.item.id],s=h?analyzeHistory(h.points,r.item,data):null;
+    const h=book?.entries[r.item.id],s=h?analyzeHistory(h.points,r.item,data,profile):null;
     return {id:r.id,itemId:r.item.id,name:r.item.name,type:r.kind,profit:Math.round(r.profit),hourly:r.hourly?Math.round(r.hourly):null,
       basis:r.kind==='craft'&&r.fuel===null?'before-fuel':'after-fee',cost:Math.round(r.purchase),market,short:Boolean(s?.short),
       quoteAt:r.item.scan,conditions:{trader:r.trader?.name,level:r.level,task:r.task||null,station:r.station?.name},

@@ -1,6 +1,7 @@
-import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,profitStability,scenario } from '/engine.js';
+import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,normalizeLayout,isScavengingItem,profitStability,scenario } from '/engine.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
+const PAGES=['loot','flips','crafts','monitor','items'],MODULES={loot:'捡什么 · 卖什么',flips:'商人倒货',crafts:'藏身处制作'};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>Number.isFinite(v)?Math.round(v).toLocaleString('zh-CN'):'—';
 const sign=v=>Number.isFinite(v)?(v>=0?'+':'−')+fmt(Math.abs(v)):'—';
@@ -33,6 +34,7 @@ function safeView(v={}){
   return {category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',filter:['short','long','favorites'].includes(v.filter)?v.filter:'all',
     stack:v.stack==='full'?'full':'single',search:typeof v.search==='string'?v.search.slice(0,200):'',
     flipType:['buy','barter'].includes(v.flipType)?v.flipType:'all',includeEvents:v.includeEvents===true,
+    lootScope:v.lootScope==='all'?'all':'scavenging',station:typeof v.station==='string'?v.station:'all',
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
 }
 function safeCatalogView(v={}){
@@ -42,14 +44,20 @@ function safeCatalogView(v={}){
 }
 const state={
  market:Object.hasOwn(MARKETS,params.get('market'))?params.get('market'):Object.hasOwn(MARKETS,saved.market)?saved.market:'pve',
- page:params.has('view')?(params.get('view')==='items'?'items':'monitor'):(saved.page==='items'?'items':'monitor'),
+ page:PAGES.includes(params.get('view'))?params.get('view'):PAGES.includes(saved.page)?saved.page:'loot',
  profiles:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,normalizeProfile(saved.profiles?.[k])])),
- views:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,safeView(saved.views?.[k])])),favorites:{},hidden:{},
+ views:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,safeView(saved.views?.[k])])),favorites:{},
+ workspaceViews:Object.fromEntries(Object.keys(MARKETS).map(m=>[m,Object.fromEntries(['loot','flips','crafts'].map(k=>[k,safeView(saved.workspaceViews?.[m]?.[k])]))])),
+ layout:normalizeLayout(saved.layout),
  catalogViews:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,safeCatalogView(saved.catalogViews?.[k])])),
  theme:['light','dark'].includes(saved.theme)?saved.theme:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'),paused:false
 };
-for(const market of Object.keys(MARKETS)){state.favorites[market]=safeIds(saved.favorites?.[market]);state.hidden[market]=safeIds(saved.hidden?.[market]);}
-function view(){return state.views[state.market] ||= {category:'all',filter:'all',stack:'single',search:'',flipType:'all',includeEvents:false,criteria:{}};}
+for(const market of Object.keys(MARKETS)){
+  state.favorites[market]=safeIds(saved.favorites?.[market]);
+  for(const v of Object.values(state.workspaceViews[market]))Object.assign(v,{includeEvents:state.views[market].includeEvents,stack:state.views[market].stack});
+}
+function view(){return state.page==='monitor'?state.views[state.market]:state.workspaceViews[state.market][state.page==='items'?'loot':state.page];}
+function allViews(){return [state.views[state.market],...Object.values(state.workspaceViews[state.market])];}
 function catalogView(){return state.catalogViews[state.market];}
 function criteria(){return view().criteria||{};}
 function options(){return {...state.profiles[state.market],stack:view().stack,onlyExecutable:criteria().onlyExecutable===true,includeEvents:view().includeEvents===true,allowDelayedTrades:true};}
@@ -58,7 +66,7 @@ let data=null,rows={loot:[],flips:[],crafts:[]},visible={loot:[],flips:[],crafts
 let historyBook={},ledger=[],signalCache=new Map(),pendingSnapshot=null,pendingSignals=null,detailRow=null,chartDays=7,toastTimer,applyTimer;
 let signalsLoading=false,signalsInfo={checked:0,total:0},detailSequence=0;
 let catalogRows=[],catalogById=new Map(),catalogPage=1,detailTrail=[],routeIndex=new Map();
-const catalogPageSize=60,screenScroll={monitor:{loot:0,flips:0,crafts:0},items:0};
+const catalogPageSize=60,screenScroll={monitor:{loot:0,flips:0,crafts:0},loot:{loot:0,flips:0,crafts:0},flips:{loot:0,flips:0,crafts:0},crafts:{loot:0,flips:0,crafts:0},items:0};
 const histories=new Map(),historyRequests=new Map();
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,3500);}
 async function api(path,market=state.market){
@@ -74,7 +82,8 @@ function syncControls(){
   const cv=catalogView();$('#catalog-search').value=cv.search;$('#catalog-category').value=cv.category;$('#catalog-availability').value=cv.availability;$('#catalog-stack').value=v.stack;$('#catalog-events').checked=v.includeEvents;
   $('#catalog-favorites').setAttribute('aria-pressed',String(cv.favoritesOnly));
   $$('[data-page]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.page===state.page)));
-  $('#monitor-toolbar').hidden=state.page!=='monitor';$('#monitor-panel').hidden=state.page!=='monitor';
+  $('#monitor-toolbar').hidden=state.page==='items';$('#monitor-panel').hidden=state.page==='items';
+  syncWorkspace();
   $('#catalog-toolbar').hidden=state.page!=='items';$('#catalog-panel').hidden=state.page!=='items';
   $$('[data-market]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.market===state.market)));
   document.documentElement.dataset.theme=state.theme;$('#theme').innerHTML=icon(state.theme==='light'?'moon':'sun');
@@ -87,14 +96,43 @@ function rebuild(){
   }
 }
 function switchPage(page){
-  if(!['monitor','items'].includes(page)||state.page===page)return;
-  if(state.page==='monitor')for(const k of ['loot','flips','crafts'])screenScroll.monitor[k]=$('#'+k).scrollTop;
+  if(!PAGES.includes(page)||state.page===page)return;
+  if(state.page!=='items')for(const k of Object.keys(MODULES))screenScroll[state.page][k]=$('#'+k).scrollTop;
   else screenScroll.items=$('#catalog-scroll').scrollTop;
-  state.page=page;syncControls();render(true);
-  if(page==='monitor')for(const k of ['loot','flips','crafts'])$('#'+k).scrollTop=screenScroll.monitor[k];
+  state.page=page;$('#layout-editor').hidden=true;syncControls();rebuild();render(true);
+  if(page!=='items')for(const k of Object.keys(MODULES))$('#'+k).scrollTop=screenScroll[page][k];
   else $('#catalog-scroll').scrollTop=screenScroll.items;
   history.replaceState(null,'',`?market=${state.market}&view=${page}`);persist();
 }
+function syncWorkspace(){
+  const page=state.page,board=page==='monitor';
+  document.body.dataset.page=page;
+  $('#overview-stats').hidden=!board;$('#workspace-heading').hidden=page==='items';
+  $('#layout-button').hidden=!board;
+  $('#context-toolbar').hidden=page==='items';
+  $('#loot-scopes').hidden=!['loot','monitor'].includes(page);
+  $('#station-filter-label').hidden=!['crafts','monitor'].includes(page);
+  const descriptions={loot:['LOOT & SELL','捡什么 · 卖什么','单格净值优先 · 最低价与24小时均价并排看'],flips:['TRADER FLIPS','商人倒货','直购与兑换 · 每次最终净利润优先'],crafts:['HIDEOUT','藏身处','每批最终净利优先 · 耗时与时薪供参考'],monitor:['YOUR WORKSPACE','你的赚钱旁屏','三块独立滚动 · 顺序、宽度和密度由你安排']};
+  if(descriptions[page]){const [eyebrow,title,description]=descriptions[page];$('#page-eyebrow').textContent=eyebrow;$('#page-title').textContent=title;$('#page-description').textContent=description;}
+  $$('[data-module]').forEach(el=>el.hidden=!board&&el.dataset.module!==page);
+  $$('[data-loot-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lootScope===view().lootScope)));
+  applyLayout();
+}
+function applyLayout(){
+  const panel=$('#monitor-panel'),l=state.layout;
+  panel.dataset.arrangement=l.arrangement;panel.classList.toggle('compact',l.compact);
+  panel.style.setProperty('--board-columns',l.order.map(k=>`minmax(280px,${l.widths[k]}fr)`).join(' '));
+  for(const key of l.order){const el=$(`[data-module="${key}"]`);panel.append(el);el.querySelector('.column-title').draggable=state.page==='monitor'&&!$('#layout-editor').hidden;}
+}
+function renderLayoutEditor(){
+  $('#layout-controls').innerHTML=state.layout.order.map((key,n)=>`<div class="layout-module"><span>${icon(key==='loot'?'backpack':key==='flips'?'exchange':'craft')}${MODULES[key]}</span><button data-move="${key}" data-step="-1" ${n===0?'disabled':''} aria-label="将${MODULES[key]}前移">←</button><button data-move="${key}" data-step="1" ${n===2?'disabled':''} aria-label="将${MODULES[key]}后移">→</button><select data-width="${key}" aria-label="${MODULES[key]}宽度">${[1,2,3].map(w=>`<option value="${w}" ${state.layout.widths[key]===w?'selected':''}>${w===1?'标准':w===2?'加宽':'更宽'}</option>`).join('')}</select></div>`).join('');
+  $('#layout-arrangement').value=state.layout.arrangement;$('#layout-compact').checked=state.layout.compact;applyLayout();
+}
+function resetCurrentFilters(){
+  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents,stack:v.stack}));
+  syncControls();rebuild();render();persist();
+}
+
 function historyFor(item){return histories.get(`${state.market}:${item.id}`)||historyBook[item.id];}
 function signal(row){
   const key=row.id;if(signalCache.has(key))return signalCache.get(key);
@@ -104,13 +142,13 @@ function signal(row){
 }
 const aliases={ledx:'ledx',gpu:'显卡',bitcoin:'比特币',sugar:'白糖',water:'水',filter:'滤芯',led:'ledx',xianka:'显卡',baitang:'白糖',lvxin:'滤芯',shuixing:'水',yaoshi:'钥匙',yiliaobao:'医疗包',zhentou:'注射器'};
 function catalogRow(r){
-  const i=r.item,s=signal(r),fav=state.favorites[state.market].includes(i.id),hidden=state.hidden[state.market].includes(i.id);
+  const i=r.item,s=signal(r),fav=state.favorites[state.market].includes(i.id);
   const fleaBest=r.fleaNet!==null&&r.channel==='跳蚤',traderBest=r.traderNet!==null&&r.channel!=='跳蚤';
   const variant=i.isPreset?(i.default?'默认整枪':'改装预设'):i.defaultPreset?'机匣':i.currencyOnly?'货币':'';
   const quoted=!r.banned&&Number.isFinite(i.price)&&i.price>0;
-  const cells=[`<td><button class="catalog-item" data-open="${i.id}"><span class="item-picture">${image(i.image)}</span><span class="catalog-identity"><strong>${esc(i.name)}</strong><span>${esc(CATEGORIES[i.category])}${variant?' · '+variant:''}${hidden?' · 已在监控隐藏':''}</span><span class="catalog-tags">${tags(r,s)}</span></span></button></td>`,
+  const cells=[`<td><button class="catalog-item" data-open="${i.id}"><span class="item-picture">${image(i.image)}</span><span class="catalog-identity"><strong>${esc(i.name)}</strong><span>${esc(CATEGORIES[i.category])}${variant?' · '+variant:''}</span><span class="catalog-tags">${tags(r,s)}</span></span></button></td>`,
     `<td data-label="占格"><b>${r.slots===null?'—':i.width+' × '+i.height}</b><small>${r.count>1?'×'+fmt(r.count)+' 满叠':i.stack>1?'可叠 '+fmt(i.stack):'单件'}</small></td>`,
-    `<td data-label="跳蚤单价" class="${r.status==='可参考'?'':'quote-muted'}"><b>${quoted?fmt(i.price):'—'}</b><small title="${i.scan?clock(i.scan):'报价时间未知'}">${r.status==='可参考'?ago(i.scan):esc(r.status)}</small></td>`,
+    `<td data-label="跳蚤单价" class="${r.status==='可参考'?'':'quote-muted'}"><b>${quoted?fmt(i.price):'—'}</b><small>24h均价 ${fmt(i.average)}</small><small title="${i.scan?clock(i.scan):'报价时间未知'}">${r.status==='可参考'?ago(i.scan):esc(r.status)}</small></td>`,
     `<td data-label="跳蚤净到手" class="${fleaBest?'best-channel':''}"><b>${fmt(r.fleaNet)}${fleaBest?icon('check'):''}</b><small>${r.fee===null?'—':'手续费 '+fmt(r.fee)}</small></td>`,
     `<td data-label="商人回收" class="${traderBest?'best-channel':''}"><b>${fmt(r.traderNet)}${traderBest?icon('check'):''}</b><small>${esc(data.traders[r.vendor?.trader]?.name|| (r.vendor?'商人':'不收购'))}</small></td>`,
     `<td data-label="单格净值" class="catalog-slot"><b>${fmt(r.slotValue)}</b><small>${Number.isFinite(r.net)?esc(r.channel):'暂无有效售价'}</small></td>`,
@@ -141,7 +179,8 @@ function renderCatalog(preserve=false){
 }
 function matches(row){
   const v=view(),c=criteria(),i=row.item;
-  if(state.hidden[state.market].includes(i.id))return false;
+  if(row.kind==='loot'&&v.lootScope==='scavenging'&&!isScavengingItem(i))return false;
+  if(row.kind==='craft'&&v.station!=='all'&&row.station?.id!==v.station)return false;
   if(v.category!=='all'&&v.category!==i.category)return false;
   if(v.filter==='favorites'&&!state.favorites[state.market].includes(i.id))return false;
   if((v.filter==='short'||v.filter==='long')&&!signal(row)[v.filter])return false;
@@ -155,49 +194,57 @@ function matches(row){
   return term.split(/\s+/).every(t=>aliases[t]?text.includes(aliases[t])||words.has(t):text.includes(t));
 }
 function spark(points){if(!points?.length)return '';const list=points.slice(-40),lo=Math.min(...list.map(p=>p.priceMin)),hi=Math.max(...list.map(p=>p.priceMin));const d=list.map((p,i)=>`${i?'L':'M'}${i/(list.length-1||1)*52} ${14-(p.priceMin-lo)/(hi-lo||1)*12}`).join(' ');return `<svg viewBox="0 0 53 16" class="spark" aria-label="近期报价走势"><path d="${d}"/></svg>`;}
-function tags(r,s){return (r.item.eventOnly||r.eventOnly?'<span class="tag event-tag">活动限定</span>':'')+(s.short?`<span class="tag short-tag">${icon('trend')}涨价 ${percent(s.premium)}</span>`:'')+(s.long?`<span class="tag long-tag">${r.kind==='loot'?'长期高值':'长期稳定'}</span>`:'');}
+function tags(r,s){return (r.item.eventOnly||r.eventOnly?'<span class="tag event-tag">活动限定</span>':'')+(s.short?`<span class="tag short-tag">${icon('trend')}7日 ${percent(s.change7)}</span>`:'')+(s.long?`<span class="tag long-tag">${r.kind==='loot'?'长期高值':'长期稳定'}</span>`:'');}
 function metric(label,value){return `<div><label>${label}</label><b>${value}</b></div>`;}
 function card(r,index){
   const i=r.item,s=signal(r),loot=r.kind==='loot',craft=r.kind==='craft',fav=state.favorites[state.market].includes(i.id);
-  const label=loot?(r.status==='报价延迟'?'延迟报价 / 格':r.fleaNet===null?'商人底价 / 格':'净到手 / 格'):craft?(r.fuel===null?'扣燃料前 / 小时':'预计净利 / 小时'):'预计净利 / 次';
-  const value=loot?fmt(r.slotValue):sign(craft?r.hourly:r.profit);
+  const label=loot?(r.status==='报价延迟'?'延迟报价 / 格':r.fleaNet===null?'商人底价 / 格':'净到手 / 格'):craft?'最终净利 / 批':'预计净利 / 次';
+  const value=loot?fmt(r.slotValue):sign(r.profit);
   const actor=craft?r.station:r.trader;
   const route=loot?'':`<div class="route">${image(actor?.image)}<span>${esc(actor?.name||'未知')} ${craft?'Lv.':'LL'}${r.level} · ${craft?'制作':r.recipe?'兑换':'直购'}</span><span>${craft?duration(r.seconds)+' · ×'+r.count:'限购 '+(r.limit??'未知')}</span></div>`;
   const ingredients=r.recipe?`<div class="ingredients">${r.recipe.slice(0,6).map(m=>`<span class="ingredient" title="${esc(m.item.name)} · ${m.tool?'可复用工具':esc(m.source)}">${image(m.item.image)}<span>${esc(m.item.shortName)} <i>×${m.count}</i>${m.tool?' ⌁':''}</span></span>`).join('')}${r.recipe.length>6?`<span class="ingredient">+${r.recipe.length-6} 项</span>`:''}</div>`:'';
-  const metrics=loot?metric('跳蚤报价 / 个',fmt(i.price))+metric(`${esc(r.channel)}净到手`,fmt(r.net))+metric(`${i.width} × ${i.height} 格`,r.count>1?`满叠 ${r.count} 件`:'单件 / 单发'):
-    metric(options().materialMode==='owned'?'材料可卖净值':craft?'材料成本':'进货成本',fmt(r.purchase))+metric(craft?(r.fuel===null?'每批扣燃料前':'每批净利润'):'跳蚤挂价',craft?sign(r.profit):fmt(i.price*r.count))+metric(craft?'产出净到手':'回报率',craft?fmt(r.net):Math.round(r.roi*100)+'%');
+  const metrics=metric('跳蚤最低 / 个',fmt(i.price))+metric('24h均价 / 个',fmt(i.average))+
+    (loot?metric(`${esc(r.channel)}净到手`,fmt(r.net)):metric(options().materialMode==='owned'?'材料可卖净值':craft?'材料成本':'进货成本',fmt(r.purchase)));
+  const extra=loot?`<span>${i.width} × ${i.height} 格${r.count>1?' · ×'+r.count:' · 单件'}</span><span>${r.fleaNet!==null&&r.traderNet!==null?'跳蚤较商人 '+sign(r.fleaNet-r.traderNet):esc(r.channel)}</span>`:
+    craft?`<span>产出净到手 ₽${fmt(r.net)}</span><span>参考时薪 ${sign(r.hourly)}</span>`:
+    `<span>回报率 ${fmt(r.roi*100)}%</span><span>售出 ${r.count>1?'×'+r.count+' ':''}净到手 ₽${fmt(r.fleaNet)}</span>`;
+
   const quoteAt=r.quoteAt||i.scan;
   const quote=r.status==='可参考'?ago(quoteAt):r.status+(quoteAt?' · '+ago(quoteAt):'');
   return `<article class="card ${s.short?'short':s.long?'long':''}" data-row="${esc(r.id)}">
   <div class="card-main" role="button" tabindex="0" data-open="${esc(r.id)}" aria-label="查看${esc(i.name)}明细">
     <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${tags(r,s)||esc(CATEGORIES[i.category])}</div></div><div class="money"><strong class="${loot?'':'positive'}">${value}</strong><span class="unit">${label}</span></div></div>
-    ${route}${ingredients}<div class="metrics">${metrics}</div></div>
-    <div class="card-tail"><i class="quote-dot ${r.status==='可参考'?'':'old'}"></i><span class="${r.status==='可参考'?'':'age-old'}" title="所用报价中最旧的时间 ${quoteAt?clock(quoteAt):'未知'}">${esc(quote)}</span>${r.task?'<span title="查看详情中的解锁任务">· 需任务</span>':''}<span class="tail-spacer"></span>${spark(s.points)}<button class="favorite ${fav?'active':''}" data-favorite="${i.id}" aria-label="${fav?'取消收藏':'收藏'}${esc(i.name)}" aria-pressed="${fav}">${icon('star')}</button><button data-open="${esc(r.id)}" aria-label="打开${esc(i.name)}明细">${icon('chevron')}</button></div></article>`;
+    ${route}${ingredients}<div class="metrics">${metrics}</div><div class="card-extra">${extra}</div></div>
+    <div class="card-tail"><i class="quote-dot ${r.status==='可参考'?'':'old'}"></i><span class="${r.status==='可参考'?'':'age-old'}" title="所用报价中最旧的时间 ${quoteAt?clock(quoteAt):'未知'}">${esc(quote)}</span><span class="tail-spacer"></span>${spark(s.points)}<button class="favorite ${fav?'active':''}" data-favorite="${i.id}" aria-label="${fav?'取消收藏':'收藏'}${esc(i.name)}" aria-pressed="${fav}">${icon('star')}</button><button data-open="${esc(r.id)}" aria-label="打开${esc(i.name)}明细">${icon('chevron')}</button></div></article>`;
 }
 function anchors(){return Object.fromEntries(['loot','flips','crafts'].map(k=>{const el=$('#'+k),top=el.getBoundingClientRect().top;const first=[...el.querySelectorAll('.card')].find(c=>c.getBoundingClientRect().bottom>top);return [k,{top:el.scrollTop,id:first?.dataset.row,offset:first?first.getBoundingClientRect().top-top:0}];}));}
 function render(preserve=false){
-  if(!data)return;const savedAnchors=preserve&&state.page==='monitor'?anchors():null,counts={};for(const r of rows.loot)counts[r.item.category]=(counts[r.item.category]||0)+1;
+  if(!data)return;const savedAnchors=preserve&&state.page!=='items'?anchors():null,counts={};for(const r of rows.loot)counts[r.item.category]=(counts[r.item.category]||0)+1;
   $('#category').innerHTML=`<option value="all">全部分类 · ${rows.loot.length}</option>`+Object.entries(CATEGORIES).map(([k,n])=>`<option value="${k}">${n} · ${counts[k]||0}</option>`).join('');$('#category').value=view().category;
   const direct=rows.flips.filter(r=>!r.recipe).length;
   $('#overview-loot').textContent=fmt(rows.loot.length);$('#overview-flips').textContent=fmt(rows.flips.length);$('#overview-crafts').textContent=fmt(rows.crafts.length);
   $('#catalog-count').textContent=Object.keys(counts).length+' 类物品';$('#direct-count').textContent=`直购 ${direct} / 兑换 ${rows.flips.length-direct}`;
-  const allFuel=rows.crafts.length&&rows.crafts.every(r=>r.fuel!==null);$('#fuel-status').textContent=allFuel?'已扣燃料分摊':'部分收益未扣燃料';$('#fuel-button').innerHTML=allFuel?'调整燃料 '+icon('chevron'):'设置燃料 '+icon('chevron');
-  $('#craft-basis').innerHTML=(allFuel?'每小时净利润':'每小时收益')+' '+icon('arrow-down');
+  $('#fuel-status').textContent='每批净利 · 不计燃料';
+  const stations=[...new Map(rows.crafts.filter(r=>r.station).map(r=>[r.station.id,r.station])).values()];
+  $('#station-filter').innerHTML='<option value="all">全部设施</option>'+stations.map(st=>`<option value="${esc(st.id)}">${esc(st.name)}</option>`).join('');
+  if(!stations.some(st=>st.id===view().station))view().station='all';$('#station-filter').value=view().station;
+  $$('[data-loot-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lootScope===view().lootScope)));
+
   for(const key of ['loot','flips','crafts']){
     visible[key]=rows[key].filter(matches);$('#'+key+'-count').textContent=fmt(visible[key].length);
-    if(state.page!=='monitor')continue;
+    if(state.page==='items'||(state.page!=='monitor'&&state.page!==key))continue;
     let message='尝试放宽分类、预算或解锁条件。',title='暂无符合条件的机会';
     if(view().filter==='favorites'){title='这里还没有收藏';message='点物品右下角的星标，下次就能快速找到。';}
-    if(view().filter==='short'){title=signalsLoading?'正在核对短线历史':'尚未确认短期暴涨';message='高单价不等于短线；需要常态价、近期涨幅和两个报价快照共同确认。';}
+    if(view().filter==='short'){title=signalsLoading?'正在核对短线历史':'尚未确认7日急涨';message='相对约7日前涨价20%以上，并由近期两个报价快照确认。';}
     if(view().filter==='long'){title=key==='loot'?'长期高值观察中':'长期收益正在积累';message=key==='loot'?'需至少24日有效历史，按现行费率回算每格价值。':'需要配对材料、产物和费率记录，尚未满足条件的机会不会标绿。';}
-    $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p><button data-reset>查看全部</button></div>`;
+    $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p>${key==='loot'&&view().lootScope==='scavenging'?'<button data-loot-scope="all">在全部物品中查找</button>':''}<button data-reset>重置筛选</button></div>`;
     if(visible[key].length>limit[key])$('#'+key).insertAdjacentHTML('beforeend',`<button class="load-more" data-more="${key}">继续查看 ${Math.min(40,visible[key].length-limit[key])} 项 ${icon('arrow-down')}</button>`);
     if(savedAnchors){const a=savedAnchors[key],el=$('#'+key),target=[...el.querySelectorAll('.card')].find(c=>c.dataset.row===a.id);el.scrollTop=a.top;if(target)el.scrollTop+=target.getBoundingClientRect().top-el.getBoundingClientRect().top-a.offset;}
     else $('#'+key).scrollTop=0;
   }
   $$('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===view().filter)));
   $('#favorite-count').textContent=state.favorites[state.market].length||'';$('#filter-active').hidden=!Object.values(criteria()).some(Boolean);
-  $('#coverage').textContent=`${MARKETS[state.market]} · 全部 ${fmt(data.rawCount)} 个源对象 · ${view().includeEvents?'含已识别活动品':'已识别活动品已隐藏'} · 5 分钟检查`;
+  $('#coverage').textContent=`${MARKETS[state.market]} · 全部 ${fmt(data.rawCount)} 个源对象 · ${view().includeEvents?'含已识别活动品':'不含活动品'} · 5 分钟检查`;
   $('#history-status').textContent=signalsLoading?'核对历史…':`历史 ${signalsInfo.checked} / ${signalsInfo.total||'—'}`;
   renderCatalog(preserve);
 }
@@ -256,14 +303,18 @@ function chartMarkup(points){
 function historyDetail(){
   if(!detailRow||!data)return;const r=detailRow,s=signal(r),h=historyFor(r.item);
   if(r.item.currencyOnly){$('#history-content').innerHTML='<p>货币条目不提供跳蚤价格走势。</p>';updateScenario();return;}
-  $('#history-content').innerHTML=h?.points?`${chartMarkup(h.points)}<div class="history-summary"><span>7日常态 <strong>₽${fmt(s.baseline)}</strong></span><span>当前溢价 <strong>${percent(s.premium)}</strong></span><span>24h <strong>${percent(s.change24)}</strong></span></div><p>${esc(s.reason)}。${esc(s.longReason||'历史仍在积累。')}</p>`:'<p>正在读取真实历史报价…</p>';
+  $('#history-content').innerHTML=h?.points?`${chartMarkup(h.points)}<div class="history-summary"><span>7日常态 <strong>₽${fmt(s.baseline)}</strong></span><span>7日涨幅 <strong>${percent(s.change7)}</strong></span><span>24h <strong>${percent(s.change24)}</strong></span></div><p>${esc(s.reason)}。${esc(s.longReason||'历史仍在积累。')}</p>`:'<p>正在读取真实历史报价…</p>';
   updateScenario();
 }
 function updateScenario(){
-  if(!detailRow||!$('#target-price'))return;const r=detailRow,target=Number($('#target-price').value),base=signal(r).baseline;
-  const values=[['目标挂价',scenario(r,data,options(),target)],['卖价回落 10%',scenario(r,data,options(),target*.9)],['回到7日常态',base?scenario(r,data,options(),base):null]];
-  $('#scenario-results').innerHTML=values.map(([name,s])=>`<div><small>${name}</small><b class="${s?.profit<0?'negative':''}">${s?(r.kind==='loot'?fmt(s.net):sign(s.profit)):'—'}</b><small>${r.kind==='loot'?'预计净到手':r.kind==='craft'&&r.fuel===null?'每批未扣燃料':'预计净利润'}</small></div>`).join('');
+  if(!detailRow||!$('#target-price'))return;
+  const count=detailRow.kind==='loot'?Math.max(1,Math.min(100000,Math.floor(Number($('#sale-quantity')?.value)||1))):detailRow.count;
+  const r={...detailRow,count,traderNet:detailRow.traderNet===null?null:detailRow.traderNet/detailRow.count*count};
+  const target=Number($('#target-price').value),base=signal(detailRow).baseline;
+  const values=[['按目标挂价',scenario(r,data,options(),target)],['按24h均价',scenario(r,data,options(),r.item.average)],['回到7日常态',base?scenario(r,data,options(),base):null]];
+  $('#scenario-results').innerHTML=values.map(([name,x])=>`<div><small>${name}</small><b class="${x?.profit<0?'negative':''}">${x?(r.kind==='loot'?fmt(x.net):sign(x.profit)):'—'}</b><small>${r.kind==='loot'?count+'件净到手':'每批 / 次净利'}</small><small>${x?'跳蚤税费 '+fmt(x.fee):'—'}</small></div>`).join('');
 }
+
 function channelComparison(r){
   const vendor=data.traders[r.vendor?.trader],fleaBest=r.fleaNet!==null&&r.channel==='跳蚤';
   const difference=Number.isFinite(r.fleaNet)&&Number.isFinite(r.traderNet)?Math.abs(r.fleaNet-r.traderNet):null;
@@ -279,7 +330,7 @@ function relatedRoutes(r){
   const routeMarkup=x=>{
     const made=x.item.id===r.item.id,tool=x.recipe?.find(m=>m.item.id===r.item.id)?.tool;
     const actor=x.kind==='craft'?x.station:x.trader,label=made?(x.kind==='craft'?'制作产出':x.recipe?'兑换取得':'商人直购'):(tool?'作为工具':'作为材料');
-    const basis=x.kind==='craft'?(x.fuel===null?'每批扣燃料前':'每批净利'):'每次净利';
+    const basis=x.kind==='craft'?'每批净利':'每次净利';
     return `<button class="related-route" data-open="${esc(x.id)}">${image(x.item.image)}<span><strong>${esc(x.item.shortName||x.item.name)}</strong><small>${label} · ${esc(actor?.name||'未知')}${x.level?' '+(x.kind==='craft'?'Lv.':'LL')+x.level:''}</small></span><span class="related-profit"><b>${sign(x.profit)}</b><small>${basis}</small></span>${icon('chevron')}</button>`;
   };
   return `<section class="detail-section"><h3>相关赚钱路线${routes.length?`<span class="count">${routes.length}</span>`:''}</h3>${presetLink}${routes.slice(0,5).map(routeMarkup).join('')}${routes.length>5?`<details class="more-routes"><summary>展开其余 ${routes.length-5} 条路线</summary>${routes.slice(5).map(routeMarkup).join('')}</details>`:''}</section>`;
@@ -289,16 +340,16 @@ function detailMarkup(r){
   const costRows=[['跳蚤报价时间',i.scan?clock(i.scan):'未知'],['当前报价数量',fmt(i.offers)],['24小时均价',fmt(i.average)],['占格 / 数量',`${i.width} × ${i.height} / ${r.count}`],['参考状态',esc(stateNote(i))],['跳蚤条件','角色 Lv.'+i.fleaLevel],['出售渠道',esc(loot?r.channel:craft?r.channel:'跳蚤')],['上架手续费',fmt(r.fee)],['商人回收净值',fmt(r.traderNet)]];
   if(!loot)costRows.push(['材料 / 进货成本',fmt(r.purchase)]);
   for(const m of r.recipe||[])costRows.push([`<button class="material-link" data-open="${m.item.id}">${image(m.item.image)}${esc(m.item.name)} ×${m.count} ${icon('chevron')}</button>`,m.tool?`工具 · 首购${m.capital===null?'待核价':' ₽'+fmt(m.capital)}`:`${fmt(m.cost)}<br><small>${esc(m.source)}</small>`]);
-  if(craft)costRows.push(['制作基础时长',duration(r.seconds)],['本批燃料分摊',r.fuel===null?'未配置':fmt(r.fuel)]);
+  if(craft)costRows.push(['制作基础时长',duration(r.seconds)],['参考每小时收益',sign(r.hourly)]);
   const conditions=r.execution?.missing||[],task=data.tasks?.[r.task];
   return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}</div></div></div>
-  <div class="detail-actions">${detailTrail.length?'<button id="detail-back">← 返回</button>':''}<button data-favorite="${i.id}">${icon('star')}${state.favorites[state.market].includes(i.id)?'已收藏':'收藏'}</button><button id="share-item">${icon('copy')}复制链接</button>${state.hidden[state.market].includes(i.id)?`<button data-restore="${i.id}">${icon('check')}恢复到监控</button>`:`<button data-hide="${i.id}">${icon('eyeoff')}在监控隐藏</button>`}</div>
-  <div class="detail-metrics"><div class="detail-metric"><small>${loot?'每格净到手':craft?(r.fuel===null?'扣燃料前 / 小时':'预计净利 / 小时'):'预计净利润 / 次'}</small><strong>₽${fmt(loot?r.slotValue:craft?r.hourly:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'整件 / 所选数量净到手':craft?'每批产出净到手':'进货成本'}</small><strong>₽${fmt(loot||craft?r.net:r.purchase)}</strong></div></div>
+  <div class="detail-actions">${detailTrail.length?'<button id="detail-back">← 返回</button>':''}<button data-favorite="${i.id}">${icon('star')}${state.favorites[state.market].includes(i.id)?'已收藏':'收藏'}</button><button id="share-item">${icon('copy')}复制链接</button></div>
+  <div class="detail-metrics"><div class="detail-metric"><small>${loot?'每格净到手':craft?'最终净利润 / 批':'预计净利润 / 次'}</small><strong>₽${fmt(loot?r.slotValue:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'整件 / 所选数量净到手':craft?'每批产出净到手':'进货成本'}</small><strong>₽${fmt(loot||craft?r.net:r.purchase)}</strong></div></div>
   ${channelComparison(r)}
   <section class="detail-section"><h3>价格走势<div class="chart-controls"><button data-days="7" class="${chartDays===7?'active':''}">7日</button><button data-days="30" class="${chartDays===30?'active':''}">30日</button></div></h3><div id="history-content"></div></section>
-  <section class="detail-section"><h3>卖价试算</h3>${i.types.includes('noFlea')||!data.flea.enabled?'<p>当前市场禁止该物品上跳蚤。</p>':`<div class="scenario-controls"><span>目标单价 ₽</span><input id="target-price" type="number" min="1" step="100" value="${i.price>0?i.price:''}" placeholder="输入期望挂价" aria-label="目标挂牌单价"></div><div id="scenario-results" class="scenario-grid"></div>`}</section>
+  <section class="detail-section"><h3>卖价试算</h3>${i.types.includes('noFlea')||!data.flea.enabled?'<p>当前市场禁止该物品上跳蚤。</p>':`<div class="price-reference"><button data-price="${i.price||''}">最低价 ₽${fmt(i.price)}</button><button data-price="${i.average||''}">24h均价 ₽${fmt(i.average)}</button></div>${loot?`<label class="quantity-control">出售数量<input id="sale-quantity" type="number" min="1" max="100000" step="1" value="${r.count}"></label>`:''}<div class="scenario-controls"><span>目标单价 ₽</span><input id="target-price" type="number" min="1" step="100" value="${i.price>0?i.price:''}" placeholder="输入期望挂价" aria-label="目标挂牌单价"></div><div id="scenario-results" class="scenario-grid"></div>`}</section>
   ${relatedRoutes(r)}
-  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">已填写的解锁条件满足</span>'}</div>${r.task?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}${(r.recipe||[]).filter(m=>m.tool).map(m=>`<label class="tool-line"><input type="checkbox" data-owned-tool="${m.item.id}" ${options().ownedTools.includes(m.item.id)?'checked':''}>我已持有 ${esc(m.item.name)}</label>`).join('')}<p>本轮剩余库存需在游戏内确认；收藏不会代表实际仓库持有。</p></section>`:''}
+  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">默认满进度 · 条件满足</span>'}</div>${r.task&&!options().maxProgress?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}${(r.recipe||[]).filter(m=>m.tool).map(m=>`<label class="tool-line"><input type="checkbox" data-owned-tool="${m.item.id}" ${options().ownedTools.includes(m.item.id)?'checked':''}>我已持有 ${esc(m.item.name)}</label>`).join('')}<p>本轮剩余库存需在游戏内确认；收藏不会代表实际仓库持有。</p></section>`:''}
   <section class="detail-section"><h3>收益拆解</h3>${dl(costRows)}<p style="margin-top:12px">${r.status==='报价延迟'?'含1至6小时的延迟报价，仅供估算；不进入短线或“仅看可执行”。':r.status!=='可参考'?(r.traderNet===null?'暂无符合当前条件的有效售价。':'跳蚤报价不满足当前条件，列表采用商人底价。'):''} ${esc(stateNote(i))}。报价为市场扫描结果，不保证实际成交。</p><a class="source-link" href="https://tarkov.dev/item/${encodeURIComponent(i.slug)}?gameMode=${state.market}" target="_blank" rel="noreferrer">核对上游物品资料 ↗</a></section>`;
 }
 async function openDetail(id,remember=true){
@@ -310,26 +361,20 @@ async function openDetail(id,remember=true){
   try{await getHistory(r.item,market);if(request===detailSequence&&market===state.market)historyDetail();}catch(error){if(request===detailSequence&&$('#history-content'))$('#history-content').innerHTML=`<p>${/404/.test(error.message)?'上游暂未提供该物品的价格历史。':'历史暂不可用：'+esc(error.message)}</p>`;}
 }
 function showSettings(){
-  if(!data){toast('行情加载后即可配置商人与设施。');return;}
   const p=options();$('#profile-market').textContent=MARKETS[state.market];
-  for(const [id,key] of [['player-level','playerLevel'],['intelligence','intelligence'],['management','management'],['material-mode','materialMode'],['fuel','fuelPerHour'],['edition','edition']])$('#'+id).value=p[key]??'';
-  const traderIds=new Set([...Object.values(data.items).flatMap(i=>i.buy.map(o=>o.trader)),...data.barters.map(b=>b.trader)]);
-  $('#trader-settings').innerHTML=Object.values(data.traders).filter(t=>traderIds.has(t.id)).map(t=>`<label><span>${image(t.image)}${esc(t.name)}</span><select data-trader="${t.id}" aria-label="${esc(t.name)}忠诚度"><option value="">未确认</option>${[0,1,2,3,4].map(n=>`<option value="${n}" ${p.traderLevels[t.id]===n?'selected':''}>${n?'LL '+n:'未解锁'}</option>`).join('')}</select></label>`).join('');
-  const stationIds=new Set((data.crafts||[]).filter(c=>!['bitcoin-farm','cultist-circle'].includes(data.stations[c.station]?.slug)).map(c=>c.station));
-  $('#station-settings').innerHTML=Object.values(data.stations).filter(s=>stationIds.has(s.id)).map(s=>`<div class="station-setting"><span>${image(s.image)}${esc(s.name)}</span><select data-station="${s.id}" aria-label="${esc(s.name)}等级"><option value="">未确认</option>${[0,1,2,3].map(n=>`<option value="${n}" ${p.stationLevels[s.id]===n?'selected':''}>${n?'Lv.'+n:'未建'}</option>`).join('')}</select><input data-station-fuel="${s.id}" type="number" min="0" step="100" value="${p.stationFuel?.[s.id]??''}" placeholder="默认分摊" aria-label="${esc(s.name)}燃料分摊"></div>`).join('');
-  const taskIds=new Set([...data.barters,...data.crafts].map(r=>r.taskUnlock).filter(Boolean));
-  for(const i of Object.values(data.items))for(const offer of i.buy)if(offer.taskUnlock)taskIds.add(offer.taskUnlock);
-  $('#task-settings').innerHTML=[...taskIds].sort((a,b)=>(data.tasks?.[a]?.name||a).localeCompare(data.tasks?.[b]?.name||b,'zh-CN')).map(id=>`<label data-task-label><input type="checkbox" data-task="${id}" ${p.completedTasks.includes(id)?'checked':''}><span>${esc(data.tasks?.[id]?.name||id)}</span></label>`).join('')||'<p class="help">暂未读取到任务资料。</p>';
-  $('#task-search').value='';$('#settings').showModal();
+  for(const [id,key] of [['management','management'],['material-mode','materialMode'],['edition','edition']])$('#'+id).value=p[key]??'';
+  $('#settings').showModal();
 }
+
 function showInfo(title,html){$('#info-title').textContent=title;$('#info-content').innerHTML=html;$('#info-dialog').showModal();}
-function methodology(){showInfo('计算口径与数据状态',`<h3>行情与收益</h3><p>每5分钟检查更新，逐项显示上游报价时间。单格净值扣除上架费；直购、兑换和制作扣除材料成本。未填燃料时只显示扣燃料前收益。工具首次购置单列，不重复计入每批成本。</p><h3>红色与绿色</h3><p>短线必须比前7个完整日常态至少高20%、比约24小时前高10%，额外净到手至少1万，并有两个不同的近期报价快照确认。</p><p>左列长线依据至少24日的历史报价按现行费率回算，每格2万以上的日期至少占80%。倒货、制作的绿色标签依赖本应用逐步积累的配对成本档案，不把价格史冒充利润史。</p><h3>活动物品与数据完整度</h3><p>活动品保留在数据库。顶部开关控制是否展示已识别的活动限定物品；规则清单仍需随版本维护，不能保证识别全部新活动。报价缺少实际耐久、容量和钥匙余次，需要在游戏中核对。</p><h3>本次核验</h3><p>${data?`市场：${MARKETS[state.market]}<br>快照：${clock(data.fetchedAt)}<br>历史候选：${signalsInfo.checked} / ${signalsInfo.total}<br>收益留档：${ledger.length} 天`:'数据加载中'}</p><h3>刷新保护</h3><p>滚动、打开明细或暂停时，新行情先保留。应用更新时同时重算数值与排序，尽量保持正在看的条目位置。</p>`);}
+function methodology(){showInfo('计算口径与数据状态',`<h3>行情与收益</h3><p>每5分钟检查更新，逐项显示上游报价时间。单格净值扣除上架费；直购、兑换和制作扣除材料成本。默认满级商人与设施、任务全完成；情报中心3级，管理技能按设置。制作不计燃料运行成本，按每批最终净利排序。工具首次购置单列，不重复计入每批成本。</p><h3>红色与绿色</h3><p>红底表示7日急涨：当前最低报价比约7日前的参照价至少高20%，税后增收至少10%。需覆盖至少6日历史，参照区间至少2次有效报价，近4小时有2次间隔至少15分钟的高价确认，且当前报价在1小时内。无需最近24小时继续上涨；没有证据不标红。7日参照取距今6至8日前的有效报价中位数。</p><p>左列长线依据至少24日的历史报价按现行费率回算，每格2万以上的日期至少占80%。倒货、制作的绿色标签依赖本应用逐步积累的配对成本档案，不把价格史冒充利润史。</p><h3>跑刀杂物</h3><p>包括交换物品、配件、饮食、医疗，以及情报和海报等。这里按物品类型划分，不代表地图刷新概率；稀有钥匙、整枪与护甲可在“全部物品”或物品一览查阅。</p><h3>活动物品与数据完整度</h3><p>活动品保留在数据库。顶部开关控制是否展示已识别的活动限定物品；规则清单仍需随版本维护，不能保证识别全部新活动。报价缺少实际耐久、容量和钥匙余次，需要在游戏中核对。</p><h3>本次核验</h3><p>${data?`市场：${MARKETS[state.market]}<br>快照：${clock(data.fetchedAt)}<br>历史候选：${signalsInfo.checked} / ${signalsInfo.total}<br>收益留档：${ledger.length} 天`:'数据加载中'}</p><h3>刷新保护</h3><p>滚动、打开明细或暂停时，新行情先保留。应用更新时同时重算数值与排序，尽量保持正在看的条目位置。</p>`);}
 function toggleFavorite(id){const list=state.favorites[state.market],index=list.indexOf(id);if(index<0)list.push(id);else list.splice(index,1);persist();render(true);if(detailRow?.item.id===id){const button=$('#detail-content [data-favorite]');if(button)button.innerHTML=icon('star')+(index<0?'已收藏':'收藏');}toast(index<0?'已收藏；收藏页仍按价值排序。':'已取消收藏');}
 function showFilters(){const c=criteria();for(const [id,key] of [['min-slot','minSlot'],['min-profit','minProfit'],['budget','budget'],['max-hours','maxHours']])$('#'+id).value=c[key]||'';$('#only-executable').checked=c.onlyExecutable||false;$('#fresh-only').checked=c.freshOnly||false;$('#filters').showModal();}
-function exportSettings(){const blob=new Blob([JSON.stringify({version:2,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function exportSettings(){const blob=new Blob([JSON.stringify({version:3,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function importSettings(file){
-  try{if(!file||file.size>512000)throw new Error('请选择小于500KB的设置文件');const p=JSON.parse(await file.text());if(p.version!==2||!p.profiles)throw new Error('不是本应用的设置备份');
-    for(const m of Object.keys(MARKETS)){state.profiles[m]=normalizeProfile(p.profiles[m]);state.favorites[m]=safeIds(p.favorites?.[m]);state.hidden[m]=safeIds(p.hidden?.[m]);state.views[m]=safeView(p.views?.[m]);state.catalogViews[m]=safeCatalogView(p.catalogViews?.[m]);}
+  try{if(!file||file.size>512000)throw new Error('请选择小于500KB的设置文件');const p=JSON.parse(await file.text());if(![2,3].includes(p.version)||!p.profiles)throw new Error('不是本应用的设置备份');
+    for(const m of Object.keys(MARKETS)){state.profiles[m]=normalizeProfile(p.profiles[m]);state.favorites[m]=safeIds(p.favorites?.[m]);state.workspaceViews[m]=Object.fromEntries(['loot','flips','crafts'].map(k=>[k,safeView(p.workspaceViews?.[m]?.[k])]));state.views[m]=safeView(p.views?.[m]);state.catalogViews[m]=safeCatalogView(p.catalogViews?.[m]);}
+    state.layout=normalizeLayout(p.layout);
     if(['light','dark'].includes(p.theme))state.theme=p.theme;
     persist();syncControls();rebuild();render(true);$('#settings').close('cancel');toast('已导入角色条件、显示偏好与收藏。');
   }catch(error){toast('导入失败：'+error.message);}
@@ -341,18 +386,20 @@ document.addEventListener('click',event=>{
   if(target.dataset.page)switchPage(target.dataset.page);
   if(target.id==='detail-back'&&detailTrail.length)openDetail(detailTrail.pop(),false);
   if(target.dataset.favorite)toggleFavorite(target.dataset.favorite);
-  if(target.dataset.hide){if(!state.hidden[state.market].includes(target.dataset.hide))state.hidden[state.market].push(target.dataset.hide);persist();$('#detail-dialog').close();render(true);toast('已从赚钱监控隐藏，物品一览中仍可查看和恢复。');}
-  if(target.dataset.restore){state.hidden[state.market]=state.hidden[state.market].filter(id=>id!==target.dataset.restore);persist();openDetail(detailRow.id,false);render(true);toast('已恢复到赚钱监控。');}
+
   if(target.dataset.close)$('#'+target.dataset.close).close();
   if(target.dataset.more){limit[target.dataset.more]+=40;render(true);}
-  if(target.hasAttribute('data-reset')){view().category='all';view().filter='all';view().search='';view().criteria={};view().flipType='all';syncControls();rebuild();render();persist();}
+  if(target.hasAttribute('data-reset')||target.id==='reset-visible-filters')resetCurrentFilters();
   if(target.hasAttribute('data-retry'))refresh(true);
   if(target.dataset.days){chartDays=Number(target.dataset.days);$$('[data-days]').forEach(b=>b.classList.toggle('active',Number(b.dataset.days)===chartDays));historyDetail();}
+  if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;render();persist();}
+  if(target.hasAttribute('data-price')&&Number(target.dataset.price)>0){$('#target-price').value=target.dataset.price;updateScenario();}
+  if(target.dataset.move){const order=state.layout.order,index=order.indexOf(target.dataset.move),to=index+Number(target.dataset.step);if(to>=0&&to<order.length){[order[index],order[to]]=[order[to],order[index]];renderLayoutEditor();persist();}}
   if(target.dataset.filter){view().filter=target.dataset.filter;render();persist();}
   if(target.id==='catalog-reset'||target.hasAttribute('data-catalog-reset')){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();renderCatalog();persist();}
   if(target.dataset.market&&target.dataset.market!==state.market){
     state.market=target.dataset.market;sequence++;detailSequence++;data=null;detailRow=null;detailTrail=[];historyBook={};ledger=[];signalCache.clear();pendingSnapshot=null;pendingSignals=null;
-    catalogRows=[];catalogById=new Map();routeIndex=new Map();catalogPage=1;screenScroll.items=0;screenScroll.monitor={loot:0,flips:0,crafts:0};
+    catalogRows=[];catalogById=new Map();routeIndex=new Map();catalogPage=1;screenScroll.items=0;for(const p of ['loot','flips','crafts','monitor'])screenScroll[p]={loot:0,flips:0,crafts:0};
     signalsInfo={checked:0,total:0};limit={loot:40,flips:30,crafts:30};rows={loot:[],flips:[],crafts:[]};syncControls();loading();warning('');$('#pending').hidden=true;
     for(const id of ['overview-loot','overview-flips','overview-crafts'])$('#'+id).textContent='—';
     history.replaceState(null,'',`?market=${state.market}&view=${state.page}`);persist();refresh();
@@ -362,30 +409,29 @@ document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.tar
 for(const el of [$('.columns'),$('#catalog-scroll')])el.addEventListener('scroll',()=>{lastInteraction=Date.now();if(pendingSnapshot||pendingSignals)queueApply();},true);
 $('#detail-dialog').addEventListener('close',()=>{detailRow=null;detailTrail=[];detailSequence++;signalCache.clear();render(true);if(pendingSnapshot||pendingSignals)queueApply();});
 $('#search').addEventListener('input',e=>{view().search=e.target.value;render();persist();});
-for(const [id,key] of [['category','category'],['stack','stack'],['flip-type','flipType']])$('#'+id).addEventListener('change',e=>{view()[key]=e.target.value;if(key==='stack')rebuild();render();persist();});
-for(const id of ['include-events','catalog-events'])$('#'+id).addEventListener('change',e=>{view().includeEvents=e.target.checked;catalogPage=1;syncControls();rebuild();render();persist();});
+for(const [id,key] of [['category','category'],['stack','stack'],['flip-type','flipType']])$('#'+id).addEventListener('change',e=>{view()[key]=e.target.value;if(key==='category'&&['weapon','armor','ammo','keys','gear','containers'].includes(e.target.value))view().lootScope='all';if(key==='stack'){allViews().forEach(v=>v.stack=e.target.value);rebuild();}render();persist();});
+for(const id of ['include-events','catalog-events'])$('#'+id).addEventListener('change',e=>{allViews().forEach(v=>v.includeEvents=e.target.checked);catalogPage=1;syncControls();rebuild();render();persist();});
 $('#catalog-search').addEventListener('input',e=>{catalogView().search=e.target.value;catalogPage=1;renderCatalog();persist();});
 for(const [id,key] of [['catalog-category','category'],['catalog-availability','availability']])$('#'+id).addEventListener('change',e=>{catalogView()[key]=e.target.value;catalogPage=1;renderCatalog();persist();});
-$('#catalog-stack').addEventListener('change',e=>{view().stack=e.target.value;catalogPage=1;syncControls();rebuild();render();persist();});
+$('#catalog-stack').addEventListener('change',e=>{allViews().forEach(v=>v.stack=e.target.value);catalogPage=1;syncControls();rebuild();render();persist();});
 $('#catalog-favorites').addEventListener('click',()=>{catalogView().favoritesOnly=!catalogView().favoritesOnly;catalogPage=1;renderCatalog();persist();});
 for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$('#'+id).addEventListener('click',()=>{catalogPage=Math.max(1,catalogPage+step);renderCatalog();$('#catalog-scroll').focus({preventScroll:true});});
 $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').addEventListener('click',applyPending);
 $('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');$('#pause').setAttribute('aria-label',state.paused?'恢复自动应用行情':'暂停自动应用行情');toast(state.paused?'已暂停自动切换，后台继续获取行情。':'已恢复自动应用行情。');if(!state.paused)applyPending();});
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
-$('#settings-button').addEventListener('click',showSettings);$('#fuel-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
+$('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
 $('#method-button').addEventListener('click',methodology);$('#history-status').addEventListener('click',methodology);
-$('#task-search').addEventListener('input',e=>$$('[data-task-label]').forEach(label=>label.hidden=!label.textContent.toLowerCase().includes(e.target.value.toLowerCase())));
 $('#profile-form').addEventListener('submit',e=>{
   if(e.submitter?.value!=='save')return;
-  const map=(selector,property)=>Object.fromEntries($$(selector).filter(el=>el.value!=='').map(el=>[el.dataset[property],Number(el.value)]));
-  state.profiles[state.market]=normalizeProfile({...state.profiles[state.market],playerLevel:$('#player-level').value,intelligence:$('#intelligence').value,management:$('#management').value,materialMode:$('#material-mode').value,fuelPerHour:$('#fuel').value,edition:$('#edition').value,traderLevels:map('[data-trader]','trader'),stationLevels:map('[data-station]','station'),stationFuel:map('[data-station-fuel]','stationFuel'),completedTasks:$$('[data-task]:checked').map(el=>el.dataset.task)});
-  persist();rebuild();render(true);toast('条件已保存，收益已重算。');
+  state.profiles[state.market]=normalizeProfile({...state.profiles[state.market],maxProgress:true,management:$('#management').value,materialMode:$('#material-mode').value,edition:$('#edition').value});
+  persist();rebuild();render(true);toast('计算设置已保存。');
 });
+
 $('#settings').addEventListener('close',()=>{if(pendingSnapshot||pendingSignals)queueApply();});
 $('#filter-form').addEventListener('submit',e=>{if(e.submitter?.value!=='save')return;view().criteria={minSlot:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};rebuild();render();persist();});
 $('#clear-filters').addEventListener('click',()=>{view().criteria={};$('#filters').close();rebuild();render();persist();});
-$('#detail-content').addEventListener('input',e=>{if(e.target.id==='target-price')updateScenario();});
+$('#detail-content').addEventListener('input',e=>{if(['target-price','sale-quantity'].includes(e.target.id))updateScenario();});
 $('#detail-content').addEventListener('change',e=>{
   const key=e.target.dataset.taskComplete?'completedTasks':e.target.dataset.ownedTool?'ownedTools':null;if(!key)return;
   const id=e.target.dataset.taskComplete||e.target.dataset.ownedTool,list=state.profiles[state.market][key];
@@ -394,9 +440,21 @@ $('#detail-content').addEventListener('change',e=>{
 });
 $('#detail-content').addEventListener('click',async e=>{if(e.target.closest('#share-item')&&detailRow){try{await navigator.clipboard.writeText(`${location.origin}/?market=${state.market}&view=items&item=${detailRow.item.id}`);toast('物品链接已复制');}catch{toast('复制不可用，可从地址栏分享网页。');}}});
 $('#export-settings').addEventListener('click',exportSettings);$('#import-settings').addEventListener('click',()=>$('#import-file').click());$('#import-file').addEventListener('change',e=>importSettings(e.target.files[0]));
-$('#restore-hidden').addEventListener('click',()=>{state.hidden[state.market]=[];persist();render(true);toast('已恢复当前市场的隐藏物品。');});
+
 $('#qq-preview').addEventListener('click',async()=>{try{const feed=await api('feed');showInfo('QQ 资讯接口',`<p>这是预留给 QQ 机器人的只读摘要，尚未绑定机器人或群，也不会自动发送。</p><h3>接口地址</h3><code>${esc(location.origin+'/api/feed?market='+state.market)}</code><h3>当前摘要</h3><pre>${esc(feed.text)}</pre><p>包含市场、税后收益、报价时间和解锁条件，具体群消息权限接入时再配置。</p>`);}catch(error){toast(error.message);}});
 window.addEventListener('online',()=>refresh());window.addEventListener('offline',()=>warning('网络已离线，保留上次成功行情。'));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&data&&Date.now()-Date.parse(data.fetchedAt)>300000&&!busy)refresh();});
 document.addEventListener('error',e=>{if(e.target.tagName==='IMG'){e.target.style.opacity='.15';e.target.title='图片暂不可用';}},true);
-icons();syncControls();loading();refresh();setInterval(()=>{if(!busy)refresh();},300000);
+$('#station-filter').addEventListener('change',e=>{view().station=e.target.value;render();persist();});
+$('#layout-button').addEventListener('click',()=>{$('#layout-editor').hidden=!$('#layout-editor').hidden;renderLayoutEditor();});
+$('#layout-done').addEventListener('click',()=>{$('#layout-editor').hidden=true;applyLayout();});
+$('#layout-reset').addEventListener('click',()=>{state.layout=normalizeLayout();renderLayoutEditor();persist();toast('已恢复三列等宽，所有板块保留。');});
+$('#layout-controls').addEventListener('change',e=>{if(e.target.dataset.width){state.layout.widths[e.target.dataset.width]=Number(e.target.value);applyLayout();persist();}});
+$('#layout-arrangement').addEventListener('change',e=>{state.layout.arrangement=e.target.value;applyLayout();persist();});
+$('#layout-compact').addEventListener('change',e=>{state.layout.compact=e.target.checked;applyLayout();persist();});
+let draggedModule=null;
+$('#monitor-panel').addEventListener('dragstart',e=>{if(state.page!=='monitor'||$('#layout-editor').hidden||!e.target.closest('.column-title'))return;draggedModule=e.target.closest('[data-module]').dataset.module;e.dataTransfer.setData('text/plain',draggedModule);e.dataTransfer.effectAllowed='move';});
+$('#monitor-panel').addEventListener('dragover',e=>{if(draggedModule&&e.target.closest('[data-module]'))e.preventDefault();});
+$('#monitor-panel').addEventListener('drop',e=>{const target=e.target.closest('[data-module]')?.dataset.module;if(!draggedModule||!target)return;e.preventDefault();const order=state.layout.order,from=order.indexOf(draggedModule),to=order.indexOf(target);order.splice(from,1);order.splice(to,0,draggedModule);draggedModule=null;renderLayoutEditor();persist();});
+$('#monitor-panel').addEventListener('dragend',()=>draggedModule=null);
+icons();syncControls();persist();loading();refresh();setInterval(()=>{if(!busy)refresh();},300000);

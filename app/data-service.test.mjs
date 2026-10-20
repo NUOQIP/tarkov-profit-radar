@@ -12,7 +12,7 @@ const fixture=()=>({market:'pve',flea:{enabled:true,sellOfferFeeRate:.05,sellReq
 test('ledger records losing routes and deduplicates repeated collection within an hour',async()=>{
   const store=memoryStore(),data=fixture();await recordDay(store,data,now);await recordDay(store,data,now+10000);
   const day=await store.read('ledger/pve/2026-10-21.json'),row=day.rows['buy-a-0'];
-  assert.equal(row.count,1);assert.equal(row.positive,0);assert.equal(row.min,-60000);
+  assert.equal(row.count,1);assert.equal(row.positive,0);assert.equal(row.min,-57000);
 });
 test('public API validates market, item ID and method before contacting source',async()=>{
   const store=memoryStore();
@@ -20,6 +20,14 @@ test('public API validates market, item ID and method before contacting source',
     const result=await handleApi(new Request('https://radar.example'+path,{method}),store);assert.equal(result.status,status);
   }
   assert.equal(store.entries.size,0);
+});
+
+test('craft ledger stores net money per batch with the same full-progress fee basis as the UI',async()=>{
+  const store=memoryStore(),data=fixture();data.stations={s:{id:'s',slug:'workbench'}};
+  data.crafts=[{id:'batch',station:'s',level:3,duration:36000,productItem:{item:'a',count:2},requiredItems:[]}];
+  await recordDay(store,data,now);
+  const day=await store.read('ledger/pve/2026-10-21.json');
+  assert.equal(day.rows['craft-batch'].min,186000);
 });
 
 test('R2 ledger update retries a concurrent writer without dropping its observations',async()=>{

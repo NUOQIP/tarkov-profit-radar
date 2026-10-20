@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, normalizeLayout, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -121,12 +121,12 @@ test('missing or level-specific barter costs are not treated as free',()=>{
   const data=dataset([item('output')],{barters:[{id:'b',offeredItem:{item:'output',count:1},requiredItems:[{item:'missing',count:1,attributes:{}}]}]});
   assert.equal(collectFlips(data,{},now).length,0);
 });
-test('crafts account for output quantity, reusable tools, time and optional fuel',()=>{
+test('crafts account for output quantity and reusable tools while ignoring legacy fuel preferences',()=>{
   const data=dataset([item('product'),item('material',{price:10000,average:10000}),item('tool',{price:999999})],{
     crafts:[{id:'c',station:'s',duration:7200,level:1,productItem:{item:'product',count:2},requiredItems:[{item:'material',count:3,attributes:{}},{item:'tool',count:1,attributes:{tool:true}}]}]
   });
-  const [without]=collectCrafts(data,{},now);assert.equal(without.fuel,null);assert.equal(without.margin,150000);
-  const [withFuel]=collectCrafts(data,{fuelPerHour:10000},now);assert.equal(withFuel.profit,130000);assert.equal(withFuel.hourly,65000);
+  const [without]=collectCrafts(data,{},now);assert.equal(without.fuel,0);assert.equal(without.margin,150000);
+  const [withFuel]=collectCrafts(data,{fuelPerHour:10000},now);assert.equal(withFuel.profit,150000);assert.equal(withFuel.hourly,75000);
 });
 test('high price and single repeated timestamp cannot independently trigger short-term classification',()=>{
   const i=item('expensive',{price:160000,average:150000}),data=dataset([i]);
@@ -174,12 +174,56 @@ test('owned materials use sale opportunity cost, never zero',()=>{
   assert.equal(collectFlips(data,{materialMode:'owned'},now)[0].purchase,36000);
 });
 
-test('station fuel override and negative outcomes remain measurable',()=>{
-  const output=item('o');
-  const data=dataset([output],{crafts:[{id:'c',station:'s',duration:7200,level:1,productItem:{item:'o',count:1},requiredItems:[]}]});
+test('negative craft outcomes remain measurable without operating fuel costs',()=>{
+  const output=item('o'),material=item('m');
+  const data=dataset([output,material],{crafts:[{id:'c',station:'s',duration:7200,level:1,productItem:{item:'o',count:1},requiredItems:[]}]});
   assert.equal(collectCrafts(data,{fuelPerHour:5000,stationFuel:{s:0}},now)[0].fuel,0);
-  assert.equal(collectCrafts(data,{fuelPerHour:100000},now).length,0);
-  assert.ok(collectCrafts(data,{fuelPerHour:100000,includeLosses:true},now)[0].profit<0);
+  assert.equal(collectCrafts(data,{fuelPerHour:100000},now).length,1);
+  data.crafts[0].requiredItems=[{item:'m',count:2}];
+  assert.equal(collectCrafts(data,{},now).length,0);
+  assert.ok(collectCrafts(data,{includeLosses:true},now)[0].profit<0);
+});
+
+test('full progress defaults unlock procurement and recipes and apply maximum facility fee discount',()=>{
+  const task='0123456789abcdef01234567',output=item('o'),m=item('m',{buy:[{trader:'t',priceRUB:10000,currency:'RUB',minTraderLevel:4,taskUnlock:task}]});
+  const data=dataset([output,m],{crafts:[{id:'c',station:'s',duration:3600,level:3,taskUnlock:task,productItem:{item:'o',count:1},requiredItems:[{item:'m',count:1}]}]});
+  const profile=normalizeProfile({playerLevel:5,intelligence:0,fuelPerHour:100000});
+  assert.equal(profile.intelligence,3);assert.equal(profile.fuelPerHour,0);
+  assert.equal(procurement(m,data,profile,now).cost,10000);
+  const [r]=collectCrafts(data,{...profile,onlyExecutable:true},now);
+  assert.equal(r.profit,83000);assert.equal(r.execution.executable,true);
+  assert.equal(collectCrafts(data,{...profile,maxProgress:false,onlyExecutable:true},now).length,0);
+});
+
+test('craft ranking prioritizes money per batch even when a shorter recipe earns more per hour',()=>{
+  const output=item('o');
+  const recipe=(id,count,duration)=>({id,station:'s',duration,level:1,productItem:{item:'o',count},requiredItems:[]});
+  const data=dataset([output],{crafts:[recipe('short',1,3600),recipe('long',2,36000)]});
+  const rows=collectCrafts(data,{},now);
+  assert.equal(rows[0].id,'craft-long');assert.ok(rows[0].profit>rows[1].profit);assert.ok(rows[0].hourly<rows[1].hourly);
+});
+
+test('a seven-day rise remains red after a plateau and does not require thirty days of history',()=>{
+  const i=item('junk',{price:15000,average:15000,basePrice:10000}),data=dataset([i]);
+  const points=Array.from({length:7},(_,n)=>({priceMin:n<3?15000:10000,timestamp:now-(n+1.5)*86400000,offerCount:10}));
+  points.push({priceMin:15000,timestamp:now-86400000,offerCount:10},{priceMin:15000,timestamp:now-3600000,offerCount:10});
+  const s=analyzeHistory(points,i,data,{},now);
+  assert.equal(s.short,true);assert.equal(s.change7,.5);assert.equal(s.change24,0);assert.equal(s.long,false);
+  assert.equal(analyzeHistory(points.map(p=>({...p,priceMin:15000})),i,data,{},now).short,false);
+  assert.equal(analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now).short,false);
+});
+
+test('scavenging scope includes useful loot types and keeps rare keys and complete guns in the database',()=>{
+  const objects=[item('mod'),item('food',{category:'food'}),item('intel',{category:'barter'}),item('poster',{category:'other',name:'海报'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
+  const rows=collectLoot(dataset(objects),{},now);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['food','intel','mod','poster']);
+  assert.equal(rows.some(r=>r.id==='key'),true);
+});
+
+test('layout migration preserves all three modules, rejects invalid sizes and restores missing modules',()=>{
+  const l=normalizeLayout({order:['crafts','crafts','bogus'],widths:{loot:99,crafts:2},arrangement:'hidden'});
+  assert.deepEqual(l.order,['crafts','loot','flips']);assert.deepEqual(l.widths,{loot:1,flips:1,crafts:2});assert.equal(l.arrangement,'columns');
+  assert.deepEqual(normalizeLayout(null).order,['loot','flips','crafts']);
 });
 
 test('long-term value needs 24 complete valid days and cannot be created from one day',()=>{
