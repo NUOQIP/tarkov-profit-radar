@@ -309,13 +309,13 @@ test('a seven-day rise remains red after a plateau and does not require thirty d
   assert.equal(analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now).short,false);
 });
 
-test('quicklook defaults include five loot types and keep all catalog items',()=>{
+test('quicklook defaults include six loot types and keep all catalog items',()=>{
   const objects=[item('mod',{category:'mods'}),item('food',{category:'food'}),item('barter',{category:'barter'}),
     item('intel',{category:'barter'}),item('intel-other',{category:'other',name:'情报文件夹'}),
     item('poster',{category:'other',name:'情报海报',types:['poster']}),item('medical',{category:'medical'}),
     item('ammo-box',{category:'ammo',types:['ammoBox']}),item('ammo',{category:'ammo',types:['ammo']}),item('document',{category:'other',name:'普通文件'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
   const rows=collectLoot(dataset(objects),{},now);
-  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['ammo-box','barter','food','intel','intel-other','medical']);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['ammo-box','barter','food','intel','intel-other','medical','poster']);
   for(const id of ['mod','poster','medical','key','gun'])assert.equal(rows.some(r=>r.id===id),true);
   assert.equal(isScavengingItem({category:'barter',isPreset:true}),false);
   assert.equal(isScavengingItem({category:'weapon',isPreset:true,default:true},['weapon']),true);

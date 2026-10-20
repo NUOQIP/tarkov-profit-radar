@@ -47,11 +47,14 @@ const safeIds=value=>Array.isArray(value)?value.filter(x=>/^[0-9a-f]{24}$/.test(
 function safeView(v={}){
   if(!v||typeof v!=='object')v={};
   const c=v.criteria||{},n=x=>Number.isFinite(Number(x))?Math.max(0,Math.min(1e10,Number(x))):0;
+  const quicklookTypes=normalizeScavengingCategories(v.quicklookTypes);
+  // Upgrade the previous default once, preserving custom selections and later opt-outs.
+  if(!v.quicklookTypesRevision&&quicklookTypes.length===5&&['barter','food','intelligence','ammoBox','medical'].every(k=>quicklookTypes.includes(k)))quicklookTypes.push('poster');
   return {category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',filter:['short','favorites'].includes(v.filter)?v.filter:'all',
     search:typeof v.search==='string'?v.search.slice(0,200):'',
     includeEvents:v.includeEvents===true,
     lootScope:v.lootScope==='scavenging'?'scavenging':'all',quicklookView:v.quicklookView==='list'?'list':'cloud',station:typeof v.station==='string'?v.station:'all',
-    quicklookTypes:normalizeScavengingCategories(v.quicklookTypes),quicklookRange:normalizeQuicklookRange(v.quicklookRange),
+    quicklookTypes,quicklookTypesRevision:1,quicklookRange:normalizeQuicklookRange(v.quicklookRange),
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
 }
 function safeCatalogView(v={}){
@@ -172,7 +175,6 @@ function syncQuicklookRange(){
   $('#quicklook-range-track').style.setProperty('--range-start',low/last*100+'%');
   $('#quicklook-range-track').style.setProperty('--range-end',high/last*100+'%');
   $$('[data-quicklook-preset]').forEach(button=>button.setAttribute('aria-pressed',String(matchesQuicklookPreset(v,QUICKLOOK_PRESETS[button.dataset.quicklookPreset]))));
-  $('#quicklook-range-default').hidden=matchesQuicklookPreset(v,{types:DEFAULT_SCAVENGING_CATEGORIES,range:DEFAULT_QUICKLOOK_RANGE});
 }
 function renderQuicklookTypeChoices(selected){
   $('#quicklook-type-options').innerHTML=Object.entries(SCAVENGING_CATEGORIES).map(([key,label])=>`<label class="type-choice"><input type="checkbox" data-quicklook-type="${key}" ${selected.includes(key)?'checked':''}><span>${esc(label)}</span></label>`).join('');

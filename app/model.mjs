@@ -80,7 +80,7 @@ export const SCAVENGING_CATEGORIES = {
   weapon:'武器',melee:'近战武器',mods:'武器配件',armor:'护甲 / 头盔',ammo:'弹药 / 投掷物',
   keys:'钥匙 / 门卡',gear:'背包 / 装备',containers:'容器',poster:'海报',other:'其他'
 };
-export const DEFAULT_SCAVENGING_CATEGORIES = ['barter','food','intelligence','ammoBox','medical'];
+export const DEFAULT_SCAVENGING_CATEGORIES = ['barter','food','intelligence','ammoBox','medical','poster'];
 export function normalizeScavengingCategories(selected) {
   return Array.isArray(selected)?[...new Set(selected.filter(k=>Object.hasOwn(SCAVENGING_CATEGORIES,k)))]:[...DEFAULT_SCAVENGING_CATEGORIES];
 }
