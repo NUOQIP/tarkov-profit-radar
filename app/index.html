@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>塔科夫赚钱旁屏 · 真实行情</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>塔科夫赚钱旁屏</h1>
+    <span class="source-badge">tarkov.dev 行情</span>
+    <label>市场 <select id="market" aria-label="市场"><option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="pvp-season">PVP 赛季</option></select></label>
+    <label class="search"><input id="search" type="search" aria-label="搜索物品、材料或设施" placeholder="搜索物品 / 材料 / 设施"></label>
+    <button id="refresh" type="button">刷新</button>
+    <button id="settings-button" type="button">收益设置</button>
+  </header>
+  <div class="toolbar">
+    <label>分类 <select id="category" aria-label="物品分类"><option value="all">全部物品</option></select></label>
+    <div class="filter-group" aria-label="行情类型">
+      <button type="button" data-filter="all" aria-pressed="true">全部</button>
+      <button type="button" data-filter="short" aria-pressed="false">短线</button>
+      <button type="button" data-filter="long" aria-pressed="false">长线</button>
+    </div>
+    <label>堆叠 <select id="stack" aria-label="堆叠数量"><option value="single">单个 / 单发</option><option value="full">满堆叠</option></select></label>
+    <span class="legend"><span class="red-dot"></span>短期暴涨 <span class="green-dot"></span>长期稳定</span>
+    <span id="status" role="status">正在获取行情…</span>
+  </div>
+  <div id="warning" role="alert" hidden></div>
+  <main class="columns">
+    <section class="column">
+      <div class="column-head"><h2>跳蚤卖出 · 单格价值 <span id="loot-count"></span></h2><div class="subhead"><span>预计单格净到手 ↓</span><span id="catalog-count"></span></div></div>
+      <div class="list" id="loot" aria-label="拾取与出售，独立滚动"><p class="empty">加载物品与价格…</p></div>
+    </section>
+    <section class="column">
+      <div class="column-head"><h2>商人倒货 <span id="flips-count"></span></h2><div class="subhead"><span>每次预计净利润 ↓</span><select id="flip-type" aria-label="倒货类型"><option value="all">直购 + 兑换</option><option value="buy">只看直购</option><option value="barter">只看兑换</option></select></div></div>
+      <div class="list" id="flips" aria-label="倒货，独立滚动"><p class="empty">同时检查直购和兑换…</p></div>
+    </section>
+    <section class="column">
+      <div class="column-head"><h2>藏身处制作 <span id="crafts-count"></span></h2><div class="subhead"><span id="craft-basis">扣燃料前收益 / 小时 ↓</span><button type="button" id="fuel-button">设置燃料</button></div></div>
+      <div class="list" id="crafts" aria-label="制作，独立滚动"><p class="empty">核对材料与产物价格…</p></div>
+    </section>
+  </main>
+  <footer><span id="coverage">不使用演示价格或手工趋势标签</span><a href="https://tarkov.dev" target="_blank" rel="noreferrer">数据来源 ↗</a><details><summary>计算口径</summary><p>每 5 分钟检查上游数据，报价时间逐项显示。左列允许 1 至 6 小时的延迟报价作参考，超过 6 小时只显示商人底价；倒货、材料和短线分析只使用 60 分钟内、至少 3 条且未明显偏离均价的报价。材料按当前最低报价与 24 小时均价中较高者计算；本轮库存未知。分类覆盖全部物品，已排除列入规则的活动限定品，尚不保证活动过滤完整。短线须历史基准、近期涨幅和两个有效快照共同确认；未积累长期成本证据时不标长线。报价不等于成交价，上架费为当前公共参数估算。</p></details></footer>
+</div>
+<dialog id="settings">
+  <form method="dialog"><h2>收益设置</h2><p>保存在此浏览器，按市场分别记忆。</p>
+    <label>角色等级 <input id="player-level" type="number" min="1" max="79" placeholder="未配置：展示条件"></label>
+    <label>情报中心 <select id="intelligence"><option value="0">未建 / 0 级</option><option value="1">1 级</option><option value="2">2 级</option><option value="3">3 级</option></select></label>
+    <label>藏身处管理技能 <input id="management" type="number" min="0" max="51" value="0"></label>
+    <label>本工位燃料分摊（₽ / 小时） <input id="fuel" type="number" min="0" step="100" placeholder="未填：只显示扣燃料前收益"></label>
+    <p>填 0 表示采用“发电机本就运行”的增量成本口径。多个并行工位应分摊燃料，不要重复全额扣除。</p>
+    <p>商人等级、任务与设施条件列在建议中；当前未连接你的角色档案。</p>
+    <div class="dialog-actions"><button value="cancel">取消</button><button value="save" class="primary">保存</button></div>
+  </form>
+</dialog>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

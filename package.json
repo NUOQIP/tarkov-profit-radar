@@ -1,0 +1,11 @@
+{
+  "name": "tarkov-profit-radar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node app/server.mjs",
+    "dev": "node app/server.mjs",
+    "test": "node --test app/model.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}
