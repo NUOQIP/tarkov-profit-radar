@@ -275,7 +275,7 @@ function renderQuicklook(){
   const grid=root.querySelector('.quicklook-grid'),board=grid.parentElement;
   const compact=state.density==='compact',height=board.clientHeight-20;
   const fit=quicklookLayout([],{width:board.clientWidth-20,height,compact,spotlight:false});
-  const rowHeight=Math.max(compact?88:104,(height-7*(fit.rows-1))/fit.rows);
+  const rowHeight=Math.max(compact?94:104,(height-7*(fit.rows-1))/fit.rows);
   const plan=quicklookLayout(visible.loot,{width:board.clientWidth-20,height,compact,spotlight:false,showAll:true,previous});
   grid.style.height=(plan.rows*rowHeight+7*(plan.rows-1)+20)+'px';
   if(key!==quicklookKey)board.scrollTop=0;
