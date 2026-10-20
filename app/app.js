@@ -1,4 +1,5 @@
-import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,profitStability,scenario } from '/engine.js';
+import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,profitStability,scenario,isShortOpportunity,lowOfferCount } from '/engine.js';
+import { createUpdateWindow } from '/update-window.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
 const UI_REVISION=6;
@@ -23,7 +24,14 @@ const paths={
  eyeoff:'<path d="m3 3 18 18M10 10a3 3 0 0 0 4 4M9 5c5-2 10 2 13 7-1 2-2 3-3 4M6 6c-2 2-4 4-4 6 4 7 11 9 16 5"/>',
  copy:'<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',check:'<path d="m5 12 4 4L20 5"/>',box:'<path d="m12 3 9 5v10l-9 5-9-5V8Z M3 8l9 5 9-5M12 13v10"/>'
 };
-const icon=(name,cls='')=>`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.box}</svg>`;
+const solidIcons={
+ 'nav-loot':'<path fill-rule="evenodd" d="M8 2h8l2 5h1l2 3v12H3V10l2-3h1Zm2 3L9 7h6l-1-2Zm-3 9v2h10v-2Z"/>',
+ 'nav-flips':'<path d="m16 1 7 6-7 6V9H3V5h13ZM8 11v4h13v4H8v4l-7-6Z"/>',
+ 'nav-crafts':'<path fill-rule="evenodd" d="M2 11 9 6v5l7-5v5h2V2h4v20H2Zm4 5v3h3v-3Zm6 0v3h3v-3Zm6 0v3h2v-3Z"/>',
+ 'nav-items':'<path d="M2 2h8v8H2Zm12 0h8v8h-8ZM2 14h8v8H2Zm12 0h8v8h-8Z"/>',
+ 'nav-profile':'<circle cx="12" cy="7" r="5"/><path d="M9 14h6l6 5v3H3v-3Z"/>'
+};
+const icon=(name,cls='')=>solidIcons[name]?`<svg class="solid-icon ${cls}" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">${solidIcons[name]}</svg>`:`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.box}</svg>`;
 function icons(root=document){root.querySelectorAll('[data-icon]').forEach(e=>e.innerHTML=icon(e.dataset.icon));}
 const image=(url,name='',className='')=>/^https:\/\/assets\.tarkov\.dev\//.test(url||'')?`<img src="${esc(url)}" alt="${esc(name)}" class="${className}" loading="lazy" decoding="async">`:'';
 let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('eft-radar-live-v1')||'{}');}catch{}
@@ -68,6 +76,7 @@ function options(){return {...state.profiles[state.market],stack:'single',histor
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{toast('设备存储不可用，这次设置仅保留到页面关闭。');}}
 let data=null,rows={loot:[],flips:[],crafts:[]},visible={loot:[],flips:[],crafts:[]},limit={loot:40,flips:30,crafts:30},sequence=0,busy=false,lastInteraction=0;
 let historyBook={},ledger=[],signalCache=new Map(),pendingSnapshot=null,pendingSignals=null,detailRow=null,chartDays=7,toastTimer,applyTimer;
+const updateWindow=createUpdateWindow(),updateDelay=15000;
 let signalsLoading=false,signalsInfo={checked:0,total:0},detailSequence=0;
 let catalogRows=[],catalogById=new Map(),catalogPage=1,detailTrail=[],routeIndex=new Map();
 const catalogPageSize=60,screenScroll={loot:{loot:0,flips:0,crafts:0},flips:{loot:0,flips:0,crafts:0},crafts:{loot:0,flips:0,crafts:0},items:0};
@@ -96,7 +105,7 @@ function syncControls(){
 function rebuild(){
   if(!data)return;
   state.profiles[state.market]=resolveTradingProfile(state.profiles[state.market],data);persist();
-  profileComplete=hasFullProgress(state.profiles[state.market],data);$('#profile-summary').textContent=profileComplete?'满进度':'自定义条件';
+  profileComplete=hasFullProgress(state.profiles[state.market],data);
   signalCache.clear();rows={loot:collectLoot(data,options()),flips:collectFlips(data,{...options(),includeLosses:true,includeUnavailable:true}),crafts:collectCrafts(data,{...options(),includeLosses:true})};
   catalogRows=collectCatalog(data,options());catalogById=new Map(catalogRows.map(r=>[r.id,r]));routeIndex=new Map();
   for(const r of [...rows.flips,...rows.crafts])for(const id of new Set([r.item.id,...(r.recipe||[]).map(m=>m.item.id)])){
@@ -133,7 +142,7 @@ function signal(row){
   const key=row.id;if(signalCache.has(key))return signalCache.get(key);
   const h=historyFor(row.item),s=h?.points?analyzeHistory(h.points,row.item,data,options()):{short:false,long:false,points:[]};
   const stable=row.kind==='loot'?{long:s.long,reason:s.longReason,days:s.longDays}:profitStability(ledger,row,data,options());
-  const result={...s,long:stable.long,longReason:stable.reason,longDays:stable.days};signalCache.set(key,result);return result;
+  const result={...s,short:isShortOpportunity(row,s),long:stable.long&&(row.kind==='loot'||row.profit>0),longReason:stable.reason,longDays:stable.days};signalCache.set(key,result);return result;
 }
 const aliases={ledx:'ledx',gpu:'显卡',bitcoin:'比特币',sugar:'白糖',water:'水',filter:'滤芯',led:'ledx',xianka:'显卡',baitang:'白糖',lvxin:'滤芯',shuixing:'水',yaoshi:'钥匙',yiliaobao:'医疗包',zhentou:'注射器'};
 function catalogRow(r){
@@ -187,7 +196,13 @@ function matches(row){
   const words=new Set(text.split(/[^a-z0-9]+/));
   return term.split(/\s+/).every(t=>aliases[t]?text.includes(aliases[t])||words.has(t):text.includes(t));
 }
-function tags(r,s){return (r.item.eventOnly||r.eventOnly?'<span class="tag event-tag">活动限定</span>':'')+(s.short?`<span class="tag short-tag">${icon('trend')}7日 ${percent(s.change7)}</span>`:'')+(s.long?`<span class="tag long-tag">${r.kind==='loot'?'长期高值':'长期稳定'}</span>`:'');}
+function tags(r,s){
+  const risk=data.flea.enabled&&!r.item.types.includes('noFlea')&&lowOfferCount(r.item);
+  return (risk?`<span class="tag quote-risk" title="当前仅 ${r.item.offers} 条报价，可能存在虚标">报价数过低 <b>${r.item.offers}</b></span>`:'')+
+    (s.short?`<span class="tag short-tag">${icon('trend')}7日 ${percent(s.change7)}</span>`:'')+
+    (s.long?`<span class="tag long-tag">${r.kind==='loot'?'长期高值':'长期稳定'}</span>`:'')+
+    (r.item.eventOnly||r.eventOnly?'<span class="tag event-tag">活动限定</span>':'');
+}
 function metric(label,value){return `<div><label>${label}</label><b>${value}</b></div>`;}
 function card(r,index){
   const i=r.item,s=signal(r),loot=r.kind==='loot',craft=r.kind==='craft',fav=state.favorites[state.market].includes(i.id);
@@ -206,7 +221,7 @@ function card(r,index){
   const quote=r.status==='可参考'?ago(quoteAt):r.status+(quoteAt?' · '+ago(quoteAt):'');
   return `<article style="--order:${Math.min(index,7)}" class="card ${s.short?'short':s.long?'long':''}" data-row="${esc(r.id)}">
   <div class="card-main" role="button" tabindex="0" data-open="${esc(r.id)}" aria-label="查看${esc(i.name)}明细">
-    <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${i.isPreset?`<span class="tag">${i.category==='weapon'?'武器预设':'装备预设'}</span>`:''}${tags(r,s)||esc(CATEGORIES[i.category])}</div></div><div class="money"><strong class="${loot?'':r.profit<0?'negative':'positive'}">${value}</strong><span class="unit">${label}</span></div></div>
+    <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${i.isPreset?`<span class="tag">${i.category==='weapon'?'武器预设':'装备预设'}</span>`:''}${tags(r,s)||(i.isPreset?'':esc(CATEGORIES[i.category]))}</div></div><div class="money"><strong class="${loot?'':r.profit<0?'negative':'positive'}">${value}</strong><span class="unit">${label}</span></div></div>
     ${route}${ingredients}<div class="metrics">${metrics}</div><div class="card-extra">${extra}</div></div>
     <div class="card-tail"><i class="quote-dot ${r.status==='可参考'?'':'old'}"></i><span class="${r.status==='可参考'?'':'age-old'}" title="所用报价中最旧的时间 ${quoteAt?clock(quoteAt):'未知'}">${esc(quote)}</span><span class="tail-spacer"></span><button class="favorite ${fav?'active':''}" data-favorite="${i.id}" aria-label="${fav?'取消收藏':'收藏'}${esc(i.name)}" aria-pressed="${fav}">${icon('star')}</button><button data-open="${esc(r.id)}" aria-label="打开${esc(i.name)}明细">${icon('chevron')}</button></div></article>`;
 }
@@ -253,30 +268,55 @@ function reading(){return state.paused||$('dialog[open]')||Date.now()-lastIntera
 function updateStatus(){if(data)$('#status').textContent='获取 '+new Date(data.fetchedAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});}
 function warning(message){$('#warning').hidden=!message;$('#warning').textContent=message||'';$('#connection-dot').classList.toggle('offline',Boolean(message));}
 function queueApply(){
-  $('#pending').hidden=!pendingSnapshot&&!pendingSignals;
-  clearTimeout(applyTimer);if(!state.paused)applyTimer=setTimeout(()=>{if(!reading())applyPending();else queueApply();},1800);
+  clearTimeout(applyTimer);
+  const pending=Boolean(pendingSnapshot||pendingSignals);$('#pending').hidden=!pending;
+  if(!pending){updateWindow.clear();return;}
+  updateWindow.start();updateWindow.setPaused(state.paused);
+  const left=updateWindow.remaining();
+  if(!state.paused&&left<=0){applyPending();return;}
+  $('#pending-countdown').textContent=state.paused?'自动更新已暂停':`${Math.ceil(left/1000)} 秒后自动更新`;
+  $('#pending').style.setProperty('--remaining',String(left/updateDelay));
+  $('#pending').classList.toggle('is-paused',state.paused);
+  if(!state.paused)applyTimer=setTimeout(queueApply,Math.min(1000,left));
 }
 function applyPending(){
+  clearTimeout(applyTimer);updateWindow.clear();
+  const changed=Boolean(pendingSnapshot||pendingSignals);
   if(pendingSnapshot){data=pendingSnapshot;pendingSnapshot=null;rebuild();updateStatus();}
   if(pendingSignals){historyBook=pendingSignals.entries||{};signalsInfo=pendingSignals;pendingSignals=null;signalCache.clear();}
-  render(true);$('#pending').hidden=true;
+  if(changed){render(true);refreshOpenDetail();}$('#pending').hidden=true;
+}
+function refreshOpenDetail(){
+  if(!detailRow||!$('#detail-dialog').open)return;
+  const fresh=detailRow.catalog?catalogById.get(detailRow.id):Object.values(rows).flat().find(r=>r.id===detailRow.id);
+  if(!fresh)return;
+  const target=$('#target-price')?.value,quantity=$('#sale-quantity')?.value,focus=document.activeElement?.id,scroll=$('#detail-dialog').scrollTop;
+  const expanded=$$('#detail-content details').map(d=>d.open);
+  detailRow=fresh;$('#detail-content').innerHTML=detailMarkup(fresh);historyDetail();
+  if(target!==undefined&&$('#target-price'))$('#target-price').value=target;
+  if(quantity!==undefined&&$('#sale-quantity'))$('#sale-quantity').value=quantity;
+  $$('#detail-content details').forEach((d,n)=>d.open=Boolean(expanded[n]));updateScenario();
+  if(['target-price','sale-quantity'].includes(focus))document.getElementById(focus)?.focus({preventScroll:true});
+  $('#detail-dialog').scrollTop=scroll;
 }
 async function refresh(force=false){
-  const seq=++sequence,market=state.market;busy=true;$('#refresh').disabled=true;$('#refresh').classList.add('spin');
+  const seq=++sequence,market=state.market,hadData=Boolean(data);busy=true;$('#refresh').disabled=true;$('#refresh').classList.add('spin');
   if(!data)$('#status').textContent='获取行情中';
   try{
     const result=await api('snapshot',market);if(seq!==sequence)return;
     warning(result.warning||result.collectionWarning);
-    if(data&&reading()&&!force){pendingSnapshot=result;queueApply();}else{data=result;rebuild();render(true);updateStatus();}
-    loadSignals(market,seq);api('ledger',market).then(r=>{if(state.market===market){ledger=r.records||[];signalCache.clear();if(!reading())render(true);}}).catch(()=>{});
+    if(data&&!force){if(data.fetchedAt!==result.fetchedAt){pendingSnapshot=result;queueApply();}}
+    else{pendingSnapshot=result;applyPending();}
+    loadSignals(market,seq,hadData&&!force);api('ledger',market).then(r=>{if(state.market===market){ledger=r.records||[];signalCache.clear();if(!reading())render(true);}}).catch(()=>{});
     const requested=params.get('item');if(requested&&data&&!detailRow){if(catalogById.has(requested))openDetail(requested);else toast('当前市场未找到这个物品。');params.delete('item');}
   }catch(error){if(seq!==sequence)return;warning(`行情暂未更新：${error.message}${data?'。保留上次成功快照。':''}`);$('#status').textContent='等待恢复';if(!data){for(const k of ['loot','flips','crafts'])$('#'+k).innerHTML=`<div class="empty">${icon('info')}<strong>行情暂不可用</strong><p>${esc(error.message)}</p><button data-retry>重试</button></div>`;$('#catalog-body').innerHTML='';$('#catalog-empty').hidden=false;$('#catalog-empty').innerHTML=`${icon('info')}<strong>物品档案暂不可用</strong><button data-retry>重新获取</button>`;$('#catalog-range').textContent='等待行情恢复';}}
   finally{if(seq===sequence){busy=false;$('#refresh').disabled=false;$('#refresh').classList.remove('spin');}}
 }
-async function loadSignals(market,seq){
+async function loadSignals(market,seq,defer=false){
   signalsLoading=true;
   try{const book=await api('signals',market);if(state.market!==market||seq!==sequence)return;signalsLoading=false;
-    if(reading()){pendingSignals=book;queueApply();}else{historyBook=book.entries||{};signalsInfo=book;signalCache.clear();render(true);}
+    if((state.paused||defer||pendingSnapshot)&&book.checkedAt!==signalsInfo.checkedAt){pendingSignals=book;queueApply();}
+    else if(!pendingSignals){historyBook=book.entries||{};signalsInfo=book;signalCache.clear();render(true);}
   }catch{if(state.market===market&&seq===sequence)signalsLoading=false;}
 }
 function loading(){for(const k of ['loot','flips','crafts']){$('#'+k).innerHTML=Array.from({length:3},()=>'<div class="skeleton" aria-label="加载中"><div></div><div></div><div></div><div></div></div>').join('');$('#'+k+'-count').textContent='—';}
@@ -452,6 +492,7 @@ document.addEventListener('click',event=>{
   if(target.dataset.filter){view().filter=target.dataset.filter;animateNext=true;render();persist();}
   if(target.id==='catalog-reset'||target.hasAttribute('data-catalog-reset')){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();renderCatalog();renderFilterSummary();persist();}
   if(target.dataset.market&&target.dataset.market!==state.market){
+    clearTimeout(applyTimer);updateWindow.clear();
     state.market=target.dataset.market;sequence++;detailSequence++;data=null;detailRow=null;detailTrail=[];historyBook={};ledger=[];signalCache.clear();pendingSnapshot=null;pendingSignals=null;
     catalogRows=[];catalogById=new Map();routeIndex=new Map();catalogPage=1;screenScroll.items=0;for(const p of ['loot','flips','crafts'])screenScroll[p]={loot:0,flips:0,crafts:0};
     signalsInfo={checked:0,total:0};limit={loot:40,flips:30,crafts:30};rows={loot:[],flips:[],crafts:[]};syncControls();loading();warning('');$('#pending').hidden=true;
@@ -466,7 +507,7 @@ $('#catalog-search').addEventListener('input',e=>{catalogView().search=e.target.
 $('#catalog-favorites').addEventListener('click',()=>{catalogView().favoritesOnly=!catalogView().favoritesOnly;catalogPage=1;renderCatalog();persist();});
 for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$('#'+id).addEventListener('click',()=>{catalogPage=Math.max(1,catalogPage+step);renderCatalog();$('#catalog-scroll').focus({preventScroll:true});});
 $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').addEventListener('click',applyPending);
-$('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');$('#pause').setAttribute('aria-label',state.paused?'恢复自动应用行情':'暂停自动应用行情');toast(state.paused?'已暂停自动切换，后台继续获取行情。':'已恢复自动应用行情。');if(!state.paused)applyPending();});
+$('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');const label=state.paused?'恢复自动应用行情':'暂停自动应用行情';$('#pause').setAttribute('aria-label',label);$('#pause').title=label;toast(state.paused?'自动更新已暂停':'自动更新已恢复');queueApply();});
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);

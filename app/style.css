@@ -37,3 +37,18 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 @media(max-width:1100px){.context-toolbar{height:auto;min-height:39px;flex-wrap:wrap;row-gap:6px}.context-toolbar .sort-indicator{display:none}}
 @media(max-width:540px){footer>span{max-width:48%}footer>div{gap:6px}#density-button{font-size:9px;gap:4px;padding:3px 5px}footer a{font-size:8px}[data-density=compact] .list{grid-template-columns:minmax(0,1fr)}[data-density=compact] .catalog-table td{height:auto;padding:0}[data-density=compact] .catalog-table tr[data-open]{gap:8px 6px;padding:10px}[data-density=compact] .catalog-table .catalog-slot>b{font-size:21px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.card:hover,.card:hover .item-picture img{transform:none}.drawer.is-closing{opacity:0}}
+
+/* Solid navigation symbols and compact market-quality labels. */
+.workspace-nav .solid-icon,.settings-button .solid-icon{fill:currentColor;stroke:none;transition:transform .18s ease,opacity .18s ease}
+.workspace-nav button:hover .solid-icon,.settings-button:hover .solid-icon{transform:translateY(-2px)}
+.settings-button{gap:8px}
+.tag.quote-risk{color:#e3b666;border-color:#d9a34744;background:#ba842014}
+.tag.quote-risk b{font:600 9px Bahnschrift,"Segoe UI",sans-serif;border-left:1px solid #d9a34744;padding-left:4px;margin-left:1px}
+[data-theme=light] .tag.quote-risk{color:#8d5d16;background:#f2d9a855;border-color:#bf8b3d66}
+.notice.pending{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;padding:9px 13px;border-color:#d2b57144;background:color-mix(in srgb,var(--panel) 92%,#d2b571);flex-shrink:0}
+.notice.pending::after{content:"";position:absolute;bottom:0;left:0;height:2px;width:100%;background:var(--gold);transform-origin:left;transform:scaleX(var(--remaining,1));transition:transform 1s linear;pointer-events:none}
+.notice.pending.is-paused::after{opacity:.35;transition:none}
+#pending-countdown{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+#apply-pending{font-size:11px;padding:5px 9px;flex:none}
+@media(max-width:700px){.notice.pending{gap:7px;padding:7px 9px;font-size:10px}#pending-countdown,#apply-pending{font-size:10px}.tag.quote-risk{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.workspace-nav .solid-icon,.settings-button .solid-icon,.notice.pending::after{transition:none}.workspace-nav button:hover .solid-icon,.settings-button:hover .solid-icon{transform:none}}

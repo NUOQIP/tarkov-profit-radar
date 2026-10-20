@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -21,18 +21,56 @@ test('upstream wearable melee objects have their own weapon category',()=>{
   assert.equal(categoryOf({types:['wearable','backpack'],properties:{}}),'gear');
 });
 
-test('preset flips use the base weapon quote and preset acquisition cost without attachment revenue',()=>{
-  const gun=item('gun'),attachment=item('scope',{price:9000000,average:9000000});
-  const preset=item('preset',{category:'weapon',isPreset:true,default:false,baseItem:'gun',price:null,average:null,scan:null,containsItems:[{item:'gun',count:1},{item:'scope',count:1}],buy:[{trader:'t',priceRUB:20000,currency:'RUB'}]});
-  const data=dataset([gun,preset,attachment]);
+test('trader presets use the standard complete weapon price, never the receiver or attachment resale',()=>{
+  const gun=item('gun',{defaultPreset:'standard',price:100000}),attachment=item('scope',{price:9000000,average:9000000});
+  const standard=item('standard',{isPreset:true,default:true,category:'weapon',baseItem:'gun',price:200000,average:200000,basePrice:80000,offers:2});
+  const preset=item('preset',{category:'weapon',isPreset:true,default:false,baseItem:'gun',price:9000000,average:9000000,containsItems:[{item:'gun',count:1},{item:'scope',count:1}],buy:[{trader:'t',priceRUB:48000,currency:'RUB'}]});
+  const data=dataset([gun,standard,preset,attachment]);
   const [row]=collectFlips(data,{},now);
-  assert.equal(row.item.id,'preset');assert.equal(row.item.valuationId,'gun');assert.equal(row.purchase,20000);
-  assert.equal(row.fleaNet,90000);assert.equal(row.profit,70000);assert.equal(row.item.price,100000);
-  assert.equal(scenario(row,data,{},120000).profit,scenario({...row,item:gun},data,{},120000).profit);
-  assert.equal(collectFlips(dataset([{...gun,types:['noFlea']},preset,attachment]),{},now).length,0);
+  assert.equal(row.item.id,'preset');assert.equal(row.item.valuationId,'standard');assert.equal(row.purchase,48000);
+  assert.equal(row.item.price,200000);assert.equal(row.profit,200000-fleaFee(80000,200000,flea)-48000);
+  assert.equal(row.item.offers,2);assert.equal(lowOfferCount(row.item),true);
+  assert.equal(scenario(row,data,{},120000).profit,scenario({...row,item:standard},data,{},120000).profit);
+  assert.equal(collectFlips(dataset([{...gun,types:['noFlea']},standard,preset,attachment]),{},now).length,0);
+  assert.equal(collectFlips(dataset([gun,preset,attachment]),{includeUnavailable:true},now)[0].profit,null);
   const armor={...preset,category:'armor',price:200000,average:200000,scan:gun.scan};
   const [armorRow]=collectFlips(dataset([gun,armor]),{},now);
   assert.equal(armorRow.item.price,200000);assert.equal(armorRow.item.valuationId,undefined);
+});
+
+test('a preset barter retains material quantity and uses the lowest available material price',()=>{
+  const receiver=item('receiver',{price:100000,defaultPreset:'standard'}),standard=item('standard',{price:200000,average:200000,basePrice:80000});
+  const preset=item('AUT',{category:'weapon',isPreset:true,baseItem:'receiver',price:900000});
+  const ram=item('ram',{price:16000,average:25000});
+  const data=dataset([receiver,standard,preset,ram],{barters:[{id:'ram-trade',trader:'t',offeredItem:{item:'AUT',count:1},requiredItems:[{item:'ram',count:3}]}]});
+  const [row]=collectFlips(data,{},now);
+  assert.equal(row.purchase,48000);assert.equal(row.item.price,200000);assert.equal(row.profit,200000-row.fee-48000);
+});
+
+test('sealed ammo packs include packaging and every contained round in the tax base exactly once',()=>{
+  const round=item('7N42',{basePrice:400,types:['ammo','noFlea']});
+  const pack=item('pack',{basePrice:1000,price:160000,average:160000,types:['ammoBox'],containsItems:[{item:'7N42',count:30}],offers:7,sell:[]});
+  const data=dataset([round,pack]),profile={intelligence:3,management:25};
+  assert.equal(feeBasePrice(pack,data),13000);
+  const row=collectLoot(data,profile,now).find(r=>r.id==='pack');
+  assert.equal(row.fee,22991);assert.equal(row.net,137009);assert.equal(row.channel,'跳蚤');
+  assert.equal(scenario(row,data,profile,160000).fee,row.fee);
+  assert.equal(scenario({...row,count:3},data,profile,160000).fee,fleaFee(13000,160000,flea,3,25,3));
+  assert.equal(feeBasePrice({...pack,containsItems:[{item:'missing',count:30}]},data),null);
+  assert.equal(scenario({...row,item:{...pack,containsItems:[]}},data,profile),null);
+  assert.equal(feeBasePrice({...pack,types:['preset'],basePrice:13000},data),13000);
+  const points=Array.from({length:26},(_,n)=>({priceMin:160000,timestamp:now-(n+1)*86400000,offerCount:20}));
+  assert.equal(analyzeHistory(points,pack,data,profile,now).longMedian,137009);
+});
+
+test('low offer counts warn without hiding positive quoted estimates; zero and unknown counts stay unpriced',()=>{
+  for(const offers of [1,2,9]){
+    const i=item('limited',{offers});assert.equal(lowOfferCount(i),true);
+    assert.equal(quoteStatus(i,dataset([i]),{},now),'可参考');
+  }
+  assert.equal(lowOfferCount(item('ten',{offers:10})),false);
+  assert.equal(lowOfferCount(item('unknown',{offers:null})),false);
+  for(const offers of [0,null]){const i=item('none',{offers});assert.equal(quoteStatus(i,dataset([i]),{},now),'报价不足');}
 });
 
 test('all offers retains unknown-price and unknown-cost routes without inventing profits',()=>{
@@ -42,6 +80,8 @@ test('all offers retains unknown-price and unknown-cost routes without inventing
   const all=collectFlips(data,{includeUnavailable:true,includeLosses:true},now);
   assert.equal(all.length,2);assert.ok(all.every(r=>r.profit===null));
   const barter=all.find(r=>r.isBarter);assert.equal(barter.purchase,null);assert.equal(barter.execution.executable,false);
+  const estimate=scenario(barter,data,{},100000);
+  assert.equal(estimate.net,90000);assert.equal(estimate.profit,null);
 });
 
 test('simplified settings fix player and facility levels while retaining trader, task and production choices',()=>{
@@ -149,7 +189,7 @@ test('trader cash purchases and barters both produce ranked after-fee profits',(
   const material=item('material',{price:10000,average:12000,basePrice:10000});
   const data=dataset([output,material],{barters:[{id:'b',trader:'t',minTraderLevel:1,offeredItem:{item:'scope',count:1},requiredItems:[{item:'material',count:2,attributes:{}}]}]});
   const rows=collectFlips(data,{},now);
-  assert.equal(rows.length,2);assert.equal(rows[0].profit,66000);assert.equal(rows[1].profit,50000);
+  assert.equal(rows.length,2);assert.equal(rows[0].profit,70000);assert.equal(rows[1].profit,50000);
   assert.ok(rows.some(r=>r.recipe===null));
   data.flea={...flea,foundInRaidRequired:true};assert.equal(collectFlips(data,{},now).length,0);
 });
@@ -172,11 +212,29 @@ test('high price and single repeated timestamp cannot independently trigger shor
   assert.equal(analyzeHistory([...points,one,one],i,data,{},now).short,false);
   const confirmed=analyzeHistory([...points,one,{...one,timestamp:now-1800000}],i,data,{},now);
   assert.equal(confirmed.short,true);assert.equal(confirmed.long,false);
+  assert.equal(analyzeHistory([...points,one,{...one,timestamp:now-1800000}],{...i,offers:1},data,{},now).short,false);
 });
-test('missing scan or too few offers cannot yield trade recommendations',()=>{
+test('missing scan or no offers cannot yield trade recommendations',()=>{
   const data=dataset([]);
   assert.equal(quoteStatus(item('a',{scan:null}),data,{},now),'无报价');
-  assert.equal(quoteStatus(item('a',{offers:1}),data,{},now),'报价不足');
+  assert.equal(quoteStatus(item('a',{offers:0}),data,{},now),'报价不足');
+});
+
+test('a rising sale price never makes loss-making flips or crafts a short opportunity',()=>{
+  const output=item('output',{price:160000,average:150000,buy:[{trader:'t',priceRUB:200000,currency:'RUB'}]});
+  const material=item('material',{price:200000,average:200000});
+  const data=dataset([output,material],{crafts:[{id:'c',station:'s',duration:3600,productItem:{item:'output',count:1},requiredItems:[{item:'material',count:1}]}]});
+  const points=Array.from({length:7},(_,n)=>({priceMin:100000,timestamp:now-(n+1.5)*86400000,offerCount:10}));
+  points.push({priceMin:160000,timestamp:now-1800000,offerCount:10});
+  const trend=analyzeHistory(points,output,data,{},now);assert.equal(trend.short,true);
+  const losing=[...collectFlips(data,{includeLosses:true},now),...collectCrafts(data,{includeLosses:true},now)];
+  assert.equal(losing.length,2);assert.ok(losing.every(r=>r.profit<0&&!isShortOpportunity(r,trend)));
+  const loot=collectLoot(data,{},now).find(r=>r.item.id==='output');assert.equal(isShortOpportunity(loot,trend),true);
+  output.buy[0].priceRUB=40000;
+  const [winning]=collectFlips(data,{},now);assert.equal(isShortOpportunity(winning,trend),true);
+  assert.equal(isShortOpportunity({...winning,profit:0},trend),false);
+  assert.equal(isShortOpportunity({...winning,profit:null},trend),false);
+  assert.equal(isShortOpportunity({...winning,status:'报价延迟'},trend),false);
 });
 
 test('event switch preserves database records and never enables currencies',()=>{

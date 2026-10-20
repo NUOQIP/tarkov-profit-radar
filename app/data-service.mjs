@@ -1,4 +1,4 @@
-import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, isScavengingItem, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus } from './model.mjs';
+import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, isScavengingItem, collectLoot, collectFlips, collectCrafts, analyzeHistory, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
   set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
@@ -48,7 +48,7 @@ export async function snapshot(store,market) {
   const key=`snapshot/${market}.json`,memoryKey=keyFor(store,key);
   return once(store,memoryKey,async()=>{
     const prior=cache.get(memoryKey)||await store.read(key);
-    if(prior?.version===2&&prior.profileMetadataVersion===2&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
+    if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
     try{
       const parts={},names=['items','items_zh','items_en','traders','hideout','barters','crafts','tasks','tasks_zh'];
       for(let index=0;index<names.length;index+=3){
@@ -71,7 +71,7 @@ export async function snapshot(store,market) {
   });
 }
 function versionOf(row,data){
-  return JSON.stringify([MODEL_VERSION,data.flea.sellOfferFeeRate,data.flea.sellRequirementFeeRate,row.item.basePrice,row.count,row.seconds||0,
+  return JSON.stringify([MODEL_VERSION,data.flea.sellOfferFeeRate,data.flea.sellRequirementFeeRate,feeBasePrice(row.item,data),row.count,row.seconds||0,
     row.recipe?.map(m=>[m.item.id,m.count,m.tool]) || [],row.level,row.task||null,row.editions||[]]);
 }
 export async function recordDay(store,data,now=Date.now()) {
@@ -156,9 +156,9 @@ export async function scanSignals(store,data,limit=12) {
 export async function digest(store,market,origin) {
   const data=await snapshot(store,market),book=await store.read(`signals/${market}.json`),profile=normalizeProfile(),rows=[...collectFlips(data,profile),...collectCrafts(data,profile)].sort((a,b)=>b.profit-a.profit);
   const items=rows.slice(0,10).map(r=>{
-    const h=book?.entries[r.item.id],s=h?analyzeHistory(h.points,r.item,data,profile):null;
+    const h=book?.entries[r.item.valuationId||r.item.id],s=h?analyzeHistory(h.points,r.item,data,profile):null;
     return {id:r.id,itemId:r.item.id,name:r.item.name,type:r.kind,profit:Math.round(r.profit),hourly:r.hourly?Math.round(r.hourly):null,
-      basis:r.kind==='craft'&&r.fuel===null?'before-fuel':'after-fee',cost:Math.round(r.purchase),market,short:Boolean(s?.short),
+      basis:r.kind==='craft'&&r.fuel===null?'before-fuel':'after-fee',cost:Math.round(r.purchase),market,short:isShortOpportunity(r,s),
       quoteAt:r.item.scan,conditions:{trader:r.trader?.name,level:r.level,task:r.task||null,station:r.station?.name},
       url:`${origin}/?market=${market}&item=${r.item.id}`};
   });

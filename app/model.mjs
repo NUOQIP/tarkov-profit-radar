@@ -18,7 +18,7 @@ export const EVENT_IDS = new Set([
 const CURRENCY_IDS = new Set(['5449016a4bdc2d6f028b456f', '5696686a4bdc2da3298b456a', '569668774bdc2da2298b4568', '5d235b4d86f7742e017bc88a']);
 const positive = n => Number.isFinite(n) && n > 0;
 const values = x => Array.isArray(x) ? x : Object.values(x || {});
-export const MODEL_VERSION = '2026-10-21-v4';
+export const MODEL_VERSION = '2026-10-21-v5';
 export const TRADING_NAMES={prapor:'Prapor',therapist:'Therapist',fence:'Fence',skier:'Skier',peacekeeper:'Peacekeeper',mechanic:'Mechanic',ragman:'Ragman',jaeger:'Jaeger',ref:'Ref'};
 export const tradingTraders=data=>values(data.traders).filter(t=>Object.hasOwn(TRADING_NAMES,t.slug));
 export const productionStations=data=>values(data.stations).filter(s=>!['bitcoin-farm','cultist-circle'].includes(s.slug)&&(data.crafts||[]).some(c=>c.station===s.id&&positive(c.duration)));
@@ -155,8 +155,27 @@ export function fleaFee(base, price, flea, intelligence = 0, management = 0, cou
   else pr **= 1.08;
   const discount = intelligence >= 3 ? 1 - (.01 * management + 1) * .3 : 1;
   if (discount <= 0) return null;
-  return Math.ceil(base * flea.sellOfferFeeRate * 4 ** p0 * count +
-    price * flea.sellRequirementFeeRate * 4 ** pr * count) * discount;
+  return Math.round((base * flea.sellOfferFeeRate * 4 ** p0 * count +
+    price * flea.sellRequirementFeeRate * 4 ** pr * count) * discount);
+}
+// Ammo-box basePrice is the packaging alone. Count the contained rounds once,
+// using handbook values, not flea quotes or the rounds' flea eligibility.
+// Presets already include their components in basePrice and must not be summed.
+export function feeBasePrice(item, data) {
+  if (!item.types?.includes('ammoBox')) return positive(item.basePrice) ? item.basePrice : null;
+  if (!Number.isFinite(item.basePrice) || item.basePrice < 0 || !item.containsItems?.length) return null;
+  let total=item.basePrice;
+  for(const content of item.containsItems){
+    const round=data.items[typeof content.item==='string'?content.item:content.item?.id];
+    if(!round || !positive(round.basePrice) || !positive(content.count))return null;
+    total+=round.basePrice*content.count;
+  }
+  return positive(total)?total:null;
+}
+export const lowOfferCount = item => Number.isFinite(item.offers) && item.offers >= 0 && item.offers < 10;
+export function isShortOpportunity(row, trend) {
+  return Boolean(trend?.short && row.status!=='报价延迟' &&
+    (row.kind==='loot' ? row.channel==='跳蚤' && positive(row.fleaNet) : positive(row.profit)));
 }
 export function quoteStatus(i, data, options = {}, now = Date.now()) {
   if (!data.flea.enabled || i.types.includes('noFlea')) return '禁售';
@@ -165,13 +184,13 @@ export function quoteStatus(i, data, options = {}, now = Date.now()) {
   const age = now - Date.parse(i.scan);
   if (age > (options.allowDelayed ? 6 * FRESH_MS : FRESH_MS)) return '报价过期';
   if (Date.parse(i.scan) > now + 60000) return '时间异常';
-  if (!Number.isFinite(i.offers) || i.offers < 3) return '报价不足';
+  if (!Number.isFinite(i.offers) || i.offers < 1) return '报价不足';
   if (positive(i.average) && (i.price > i.average * 3 || i.price < i.average * .25)) return '报价异常';
   return age > FRESH_MS ? '报价延迟' : '可参考';
 }
 export function sale(i, data, options = {}, count = 1, now = Date.now()) {
   const status = quoteStatus(i, data, options, now);
-  const fee = ['可参考', '报价延迟'].includes(status) ? fleaFee(i.basePrice, i.price, data.flea, options.intelligence || 0, options.management || 0, count) : null;
+  const fee = ['可参考', '报价延迟'].includes(status) ? fleaFee(feeBasePrice(i,data), i.price, data.flea, options.intelligence || 0, options.management || 0, count) : null;
   const fleaNet = fee === null ? null : i.price * count - fee;
   const vendor = i.sell.filter(x => positive(x.priceRUB)).sort((a, b) => b.priceRUB - a.priceRUB)[0];
   const traderNet = vendor ? vendor.priceRUB * count : null;
@@ -236,7 +255,7 @@ export function isExcluded(item,options={}) {
 }
 export function procurement(item, data, options = {}, now = Date.now()) {
   const status=quoteStatus(item,data,{...options,allowDelayed:options.allowDelayedTrades===true},now);
-  let best = ['可参考','报价延迟'].includes(status) ? {cost:Math.max(item.price,item.average || item.price),source:'跳蚤',flea:true,status} : null;
+  let best = ['可参考','报价延迟'].includes(status) ? {cost:item.price,source:'跳蚤',flea:true,status} : null;
   for (const offer of item.buy || []) {
     if (!positive(offer.priceRUB) || !['RUB','USD','EUR'].includes(offer.currency)) continue;
     if (!options.maxProgress && (options.traderLevels?.[offer.trader] ?? -1) < offer.minTraderLevel) continue;
@@ -283,12 +302,18 @@ export function collectFlips(data, options = {}, now = Date.now()) {
   const rows = [];
   if (data.flea.foundInRaidRequired) return rows;
   const add = (id, item, purchase, trader, level, limit, task, recipe, count = 1, editions = []) => {
-    // The player's valuation rule: price a preset as its underlying weapon only.
-    // Extra attachments never add resale income; acquisition remains the preset offer.
+    // A trader preset is an acquisition route for the same weapon. Use its
+    // standard complete-gun quote, not a stripped receiver or a rare build quote.
+    // Attachment proceeds are deliberately excluded.
     if(item.isPreset&&item.category==='weapon'&&data.items[item.baseItem]){
       const base=data.items[item.baseItem];
-      item={...item,...Object.fromEntries(['basePrice','price','average','low24','high24','offers','scan','updated','fleaLevel'].map(k=>[k,base[k]])),
-        types:[...new Set([...item.types,...base.types])],valuationId:base.id,valuationName:base.name};
+      const standard=data.items[base.defaultPreset];
+      if(standard){
+        item={...item,...Object.fromEntries(['basePrice','price','average','low24','high24','offers','scan','updated','fleaLevel'].map(k=>[k,standard[k]])),
+          types:[...new Set([...item.types,...base.types,...standard.types])],valuationId:standard.id,valuationName:base.name};
+      }else{
+        item={...item,basePrice:null,price:null,average:null,scan:null,offers:null,valuationId:base.id,valuationName:base.name};
+      }
     }
     const tradeOptions={...options,allowDelayed:options.allowDelayedTrades===true};
     if (isExcluded(item,options)) return;
@@ -371,9 +396,9 @@ export function analyzeHistory(points, item, data, options = {}, now = Date.now(
   const independent=confirmed.length>=2 && confirmed.at(-1).timestamp-confirmed[0].timestamp>=15*60000;
   let short = false, premium = base ? item.price / base - 1 : null;
   let extraNet=null;
-  if (days.size >= 6 && referenceRows.length >= 2 && independent && quoteStatus(item, data, options, now) === '可参考') {
-    const baseFee = fleaFee(item.basePrice, reference7, data.flea, options.intelligence || 0, options.management || 0);
-    const currentFee = fleaFee(item.basePrice, item.price, data.flea, options.intelligence || 0, options.management || 0);
+  if (days.size >= 6 && referenceRows.length >= 2 && independent && item.offers>=3 && quoteStatus(item, data, options, now) === '可参考') {
+    const baseFee = fleaFee(feeBasePrice(item,data), reference7, data.flea, options.intelligence || 0, options.management || 0);
+    const currentFee = fleaFee(feeBasePrice(item,data), item.price, data.flea, options.intelligence || 0, options.management || 0);
     if(baseFee!==null&&currentFee!==null)extraNet=(item.price-currentFee)-(reference7-baseFee);
     short = extraNet!==null && change7 >= .2 && extraNet>0 && extraNet>=Math.max(0,reference7-baseFee)*.1 &&
       recent.slice(-2).every(p => p.priceMin >= reference7*1.2);
@@ -385,12 +410,12 @@ export function analyzeHistory(points, item, data, options = {}, now = Date.now(
   }
   const stackCount=options.stack==='full'?(item.stack||1):1;
   const historicalSlots=[...daily.values()].map(list=>{
-    const price=median(list),fee=fleaFee(item.basePrice,price,data.flea,options.intelligence||0,options.management||0,stackCount);
+    const price=median(list),fee=fleaFee(feeBasePrice(item,data),price,data.flea,options.intelligence||0,options.management||0,stackCount);
     return fee===null?null:(price*stackCount-fee)/(item.width*item.height);
   }).filter(Number.isFinite).sort((a,b)=>a-b);
   const stableDays=historicalSlots.filter(n=>n>=LONG_TERM_SLOT_MIN).length;
   const lowerQuartile=historicalSlots[Math.floor(historicalSlots.length*.25)] ?? null;
-  const currentFee=fleaFee(item.basePrice,item.price,data.flea,options.intelligence||0,options.management||0,stackCount);
+  const currentFee=fleaFee(feeBasePrice(item,data),item.price,data.flea,options.intelligence||0,options.management||0,stackCount);
   const currentSlot=currentFee===null?0:(item.price*stackCount-currentFee)/(item.width*item.height);
   const long=historicalSlots.length>=24 && stableDays/historicalSlots.length>=.8 && lowerQuartile>=LONG_TERM_SLOT_MIN && currentSlot>=LONG_TERM_SLOT_MIN &&
     ['可参考','报价延迟'].includes(quoteStatus(item,data,{...options,allowDelayed:true},now)) && !item.excluded;
@@ -402,15 +427,15 @@ export function analyzeHistory(points, item, data, options = {}, now = Date.now(
 }
 export function scenario(row,data,options={},price=row.item.price) {
   if(!positive(price)||row.item.types.includes('noFlea')||!data.flea.enabled) return null;
-  const fee=fleaFee(row.item.basePrice,price,data.flea,options.intelligence||0,options.management||0,row.count);
+  const fee=fleaFee(feeBasePrice(row.item,data),price,data.flea,options.intelligence||0,options.management||0,row.count);
   if(fee===null) return null;
   const fleaNet=price*row.count-fee;
   const net=row.kind==='flip'?fleaNet:Math.max(fleaNet,row.traderNet || 0);
-  const profit=net-(row.purchase || 0)-(row.fuel || 0);
-  return {price,fee,net,profit,hourly:row.hours?profit/row.hours:null,slotValue:net/(row.item.width*row.item.height)};
+  const profit=row.kind==='loot'?net:Number.isFinite(row.purchase)?net-row.purchase-(row.fuel||0):null;
+  return {price,fee,net,profit,hourly:row.hours&&profit!==null?profit/row.hours:null,slotValue:net/(row.item.width*row.item.height)};
 }
 export function profitStability(records,row,data,options={},now=Date.now()) {
-  const expected=JSON.stringify([MODEL_VERSION,data.flea.sellOfferFeeRate,data.flea.sellRequirementFeeRate,row.item.basePrice,row.count,row.seconds||0,
+  const expected=JSON.stringify([MODEL_VERSION,data.flea.sellOfferFeeRate,data.flea.sellRequirementFeeRate,feeBasePrice(row.item,data),row.count,row.seconds||0,
     row.recipe?.map(m=>[m.item.id,m.count,m.tool]) || [],row.level,row.task||null,row.editions||[]]);
   const today=new Date(now).toISOString().slice(0,10),cutoff=new Date(now-30*86400000).toISOString().slice(0,10);
   const matching=(records||[]).filter(d=>d.date>=cutoff&&d.date<today).map(d=>d.rows?.[row.id]).filter(r=>r?.version===expected && r.count>=4);
