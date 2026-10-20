@@ -36,14 +36,9 @@ export function normalizeProfile(input = {}) {
 }
 // A browsing scope, not a claim about spawn probability or a particular map.
 export function isScavengingItem(item) {
-  return !item.isPreset && !item.currencyOnly && (['barter','mods','food','medical'].includes(item.category) ||
-    (item.category==='other' && /海报|情报|文件|资料|poster|intelligence|information|document/i.test([item.name,item.english,item.slug].join(' '))));
-}
-export function normalizeLayout(input={}) {
-  const keys=['loot','flips','crafts'];
-  const order=[...new Set([...(Array.isArray(input?.order)?input.order:[]),...keys])].filter(k=>keys.includes(k));
-  return {order,widths:Object.fromEntries(keys.map(k=>[k,[1,2,3].includes(Number(input?.widths?.[k]))?Number(input.widths[k]):1])),
-    arrangement:input?.arrangement==='stack'?'stack':'columns',compact:input?.compact===true};
+  if(item.isPreset || item.currencyOnly || item.types?.includes('poster')) return false;
+  return ['barter','food'].includes(item.category) ||
+    (item.category==='other' && (item.types?.includes('intelligence') || /情报|intelligence/i.test([item.name,item.english,item.slug].join(' '))));
 }
 export function categoryOf(item, items = {}) {
   const basis = item.properties?.baseItem ? items[item.properties.baseItem] || item : item;

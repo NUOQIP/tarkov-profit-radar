@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, normalizeLayout, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, normalizeSnapshot, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, isScavengingItem, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -213,17 +213,16 @@ test('a seven-day rise remains red after a plateau and does not require thirty d
   assert.equal(analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now).short,false);
 });
 
-test('scavenging scope includes useful loot types and keeps rare keys and complete guns in the database',()=>{
-  const objects=[item('mod'),item('food',{category:'food'}),item('intel',{category:'barter'}),item('poster',{category:'other',name:'海报'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
+test('scavenging contains only barter, provisions and intelligence without removing other catalog items',()=>{
+  const objects=[item('mod',{category:'mods'}),item('food',{category:'food'}),item('barter',{category:'barter'}),
+    item('intel',{category:'barter'}),item('intel-other',{category:'other',name:'情报文件夹'}),
+    item('poster',{category:'other',name:'情报海报',types:['poster']}),item('medical',{category:'medical'}),
+    item('document',{category:'other',name:'普通文件'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
   const rows=collectLoot(dataset(objects),{},now);
-  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['food','intel','mod','poster']);
-  assert.equal(rows.some(r=>r.id==='key'),true);
-});
-
-test('layout migration preserves all three modules, rejects invalid sizes and restores missing modules',()=>{
-  const l=normalizeLayout({order:['crafts','crafts','bogus'],widths:{loot:99,crafts:2},arrangement:'hidden'});
-  assert.deepEqual(l.order,['crafts','loot','flips']);assert.deepEqual(l.widths,{loot:1,flips:1,crafts:2});assert.equal(l.arrangement,'columns');
-  assert.deepEqual(normalizeLayout(null).order,['loot','flips','crafts']);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['barter','food','intel','intel-other']);
+  for(const id of ['mod','poster','medical','key','gun'])assert.equal(rows.some(r=>r.id===id),true);
+  assert.equal(isScavengingItem({category:'barter',isPreset:true}),false);
+  assert.equal(isScavengingItem({category:'barter',currencyOnly:true}),false);
 });
 
 test('long-term value needs 24 complete valid days and cannot be created from one day',()=>{
