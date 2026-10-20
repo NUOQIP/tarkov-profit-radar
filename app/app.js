@@ -1,9 +1,9 @@
 import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,analyzeHistory,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,scenario,isShortOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
-import { quicklookLayout,opportunityTone,QUICKLOOK_VALUE_STEPS,DEFAULT_QUICKLOOK_RANGE,EVERYDAY_QUICKLOOK_RANGE,normalizeQuicklookRange,quicklookRangeMatches } from '/quicklook.js';
+import { quicklookLayout,opportunityTone,QUICKLOOK_VALUE_STEPS,DEFAULT_QUICKLOOK_RANGE,normalizeQuicklookRange,quicklookRangeMatches } from '/quicklook.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
-const QUICKLOOK_PRESETS={everyday:{types:DEFAULT_SCAVENGING_CATEGORIES,range:EVERYDAY_QUICKLOOK_RANGE},keys:{types:['keys'],range:DEFAULT_QUICKLOOK_RANGE},mods:{types:['mods'],range:DEFAULT_QUICKLOOK_RANGE}};
+const QUICKLOOK_PRESETS={keys:{types:['keys'],range:DEFAULT_QUICKLOOK_RANGE},mods:{types:['mods'],range:DEFAULT_QUICKLOOK_RANGE}};
 const matchesQuicklookPreset=(v,p)=>v.quicklookRange.every((n,i)=>n===p.range[i])&&v.quicklookTypes.length===p.types.length&&p.types.every(k=>v.quicklookTypes.includes(k));
 const UI_REVISION=6;
 const PAGES=['loot','flips','crafts','items'],MODULES={loot:'捡什么 · 卖什么',flips:'商人倒货',crafts:'藏身处制作'};
