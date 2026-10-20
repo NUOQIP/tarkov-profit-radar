@@ -198,7 +198,10 @@ function matches(row){
 }
 function tags(r,s){
   const risk=data.flea.enabled&&!r.item.types.includes('noFlea')&&lowOfferCount(r.item);
+  const vendor=data.traders[r.vendor?.trader]?.name;
+  const traderWins=vendor&&Number.isFinite(r.traderNet)&&Number.isFinite(r.fleaNet)&&r.traderNet>r.fleaNet;
   return (risk?`<span class="tag quote-risk" title="当前仅 ${r.item.offers} 条报价，可能存在虚标">报价数过低 <b>${r.item.offers}</b></span>`:'')+
+    (traderWins?`<span class="tag trader-tag" title="比跳蚤税后多 ₽${fmt(r.traderNet-r.fleaNet)}">卖 ${esc(vendor)}</span>`:'')+
     (s.short?`<span class="tag short-tag">${icon('trend')}7日 ${percent(s.change7)}</span>`:'')+
     (s.long?`<span class="tag long-tag">${r.kind==='loot'?'长期高值':'长期稳定'}</span>`:'')+
     (r.item.eventOnly||r.eventOnly?'<span class="tag event-tag">活动限定</span>':'');

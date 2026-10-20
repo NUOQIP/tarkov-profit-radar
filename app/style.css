@@ -43,6 +43,8 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 .workspace-nav button:hover .solid-icon,.settings-button:hover .solid-icon{transform:translateY(-2px)}
 .settings-button{gap:8px}
 .tag.quote-risk{color:#e3b666;border-color:#d9a34744;background:#ba842014}
+.tag.trader-tag{color:#9bcbdc;border-color:#79b3cc44;background:#5899b318}
+[data-theme=light] .tag.trader-tag{color:#28647a;border-color:#4c94ae55;background:#a9d4e333}
 .tag.quote-risk b{font:600 9px Bahnschrift,"Segoe UI",sans-serif;border-left:1px solid #d9a34744;padding-left:4px;margin-left:1px}
 [data-theme=light] .tag.quote-risk{color:#8d5d16;background:#f2d9a855;border-color:#bf8b3d66}
 .notice.pending{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;padding:9px 13px;border-color:#d2b57144;background:color-mix(in srgb,var(--panel) 92%,#d2b571);flex-shrink:0}
