@@ -108,7 +108,7 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
     items[i.id] = {
       id: i.id, name: label(i.name, i.normalizedName), shortName: label(i.shortName, i.normalizedName),
       english: en[i.name] || i.normalizedName, slug: i.normalizedName, category: categoryOf(i, raw.items),
-      image: i.iconLink, url: i.link, wiki: i.wikiLink, types: i.types || [],
+      image: i.iconLink, art: i.image512pxLink || i.baseImageLink || i.iconLink, url: i.link, wiki: i.wikiLink, types: i.types || [],
       width: i.width, height: i.height, stack: i.stackMaxSize || 1,
       basePrice: i.basePrice, price: i.lastLowPrice, average: i.avg24hPrice,
       low24: i.low24hPrice, high24: i.high24hPrice, change48: i.changeLast48hPercent,
@@ -141,7 +141,7 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
     stations[s.id] = { id: s.id, name: names[s.normalizedName] || s.normalizedName, slug: s.normalizedName, image: s.imageLink, maxLevel:Math.max(0,...(s.levels||[]).map(l=>l.level||0)) };
   }
   return {
-    version: 2, profileMetadataVersion:2, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
+    version: 2, profileMetadataVersion:2, imageVersion:1, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
     rawCount: Object.keys(raw.items).length, flea: raw.fleaMarket, items, traders, stations,
     barters: parts.barters.data, crafts: parts.crafts.data, history: {},
     tasks:parts.tasks?.data || {}, taskNames:parts.tasks_zh?.data || {}

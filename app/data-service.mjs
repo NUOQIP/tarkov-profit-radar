@@ -48,7 +48,7 @@ export async function snapshot(store,market) {
   const key=`snapshot/${market}.json`,memoryKey=keyFor(store,key);
   return once(store,memoryKey,async()=>{
     const prior=cache.get(memoryKey)||await store.read(key);
-    if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
+    if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&prior.imageVersion===1&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
     try{
       const parts={},names=['items','items_zh','items_en','traders','hideout','barters','crafts','tasks','tasks_zh'];
       for(let index=0;index<names.length;index+=3){

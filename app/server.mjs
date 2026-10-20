@@ -19,6 +19,7 @@ const files=new Map([
   ['/radar.css',[join(here,'style.css'),'text/css']],
   ['/engine.js',[join(here,'model.mjs'),'text/javascript']],
   ['/update-window.js',[join(here,'update-window.mjs'),'text/javascript']],
+  ['/quicklook.js',[join(here,'quicklook.mjs'),'text/javascript']],
   ['/favicon.svg',[join(root,'public','favicon.svg'),'image/svg+xml']]
 ]);
 const server=createServer(async(req,res)=>{
