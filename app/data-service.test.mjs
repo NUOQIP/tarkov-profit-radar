@@ -46,7 +46,7 @@ test('R2 ledger update retries a concurrent writer without dropping its observat
 });
 
 test('a stalled hosted request cannot hold a later request behind its I/O promise',async()=>{
-  const data={...fixture(),version:2,modelVersion:MODEL_VERSION,profileMetadataVersion:2,imageVersion:1,market:'regular',fetchedAt:new Date().toISOString()};
+  const data={...fixture(),version:2,modelVersion:MODEL_VERSION,profileMetadataVersion:2,imageVersion:1,categoryMetadataVersion:1,market:'regular',fetchedAt:new Date().toISOString()};
   let release,reads=0;
   const gate=new Promise(resolve=>{release=resolve;});
   const bucket={async get(){reads++;if(reads===1)await gate;return {json:async()=>structuredClone(data)};}};

@@ -100,10 +100,12 @@ test('normalization preserves every equipment category and resolves actual trans
     {id:'armor',name:'armor_name',types:['armor'],properties:{}},
     {id:'meds',name:'meds_name',types:['meds'],properties:{}},
     {id:'sugar',name:'sugar_name',types:['provisions'],properties:{}},
-    {id:'bolt',name:'bolt_name',types:['barter'],properties:{}}
+    {id:'bolt',name:'bolt_name',types:['barter'],categories:['test-source-category'],properties:{}}
   ];
   const data=normalizeSnapshot({items:{data:{items:Object.fromEntries(raw.map(i=>[i.id,i])),fleaMarket:flea}},items_zh:{data:{gun_name:'步枪'}},traders:{data:{}},hideout:{data:{}},barters:{data:[]},crafts:{data:[]}},'pve');
   assert.equal(data.items.gun.name,'步枪');
+  assert.deepEqual(data.items.bolt.sourceCategories,['test-source-category']);
+  assert.equal(data.categoryMetadataVersion,1);
   assert.deepEqual(Object.values(data.items).map(i=>i.category),['weapon','mods','keys','ammo','armor','medical','food','barter']);
 });
 test('noFlea and old quotes cannot inflate net value',()=>{
@@ -317,6 +319,16 @@ test('scavenging contains only barter, provisions and intelligence without remov
   for(const id of ['mod','poster','medical','key','gun'])assert.equal(rows.some(r=>r.id===id),true);
   assert.equal(isScavengingItem({category:'barter',isPreset:true}),false);
   assert.equal(isScavengingItem({category:'barter',currencyOnly:true}),false);
+  const excluded=[
+    item('camera',{category:'barter',sourceCategories:['5447e0e74bdc2d3c308b4567']}),
+    item('plan',{category:'barter',sourceCategories:['567849dd4bdc2d150f8b456e']}),
+    item('survey',{category:'barter',slug:'topographic-survey-maps'}),
+    item('map-localized',{category:'barter',name:'工厂地图'})
+  ];
+  assert.ok(excluded.every(i=>!isScavengingItem(i)));
+  assert.equal(collectCatalog(dataset(excluded),{},now).length,excluded.length);
+  // Special-slot support alone is not the special-items category: paracord remains loot.
+  assert.equal(isScavengingItem(item('paracord',{category:'barter',types:['barter','specialSlot'],sourceCategories:['590c745b86f7743cc433c5f2']})),true);
 });
 
 test('long-term value needs 24 complete valid days and cannot be created from one day',()=>{
