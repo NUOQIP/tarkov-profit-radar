@@ -39,6 +39,11 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.card:hover,.card:hover .item-picture img{transform:none}.drawer.is-closing{opacity:0}}
 
 /* Solid navigation symbols and compact market-quality labels. */
+#refresh{display:grid;place-items:center}
+#refresh .solid-icon{width:18px;height:18px;transform-origin:center;transition:transform .25s ease}
+#refresh:not(:disabled):hover .solid-icon{transform:rotate(45deg)}
+#refresh.spin{color:var(--gold)}
+#refresh.spin .solid-icon{animation:rotate 1s linear infinite}
 .workspace-nav .solid-icon,.settings-button .solid-icon{fill:currentColor;stroke:none;transition:transform .18s ease,opacity .18s ease}
 .workspace-nav button:hover .solid-icon,.settings-button:hover .solid-icon{transform:translateY(-2px)}
 .settings-button{gap:8px}
