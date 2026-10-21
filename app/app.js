@@ -1,8 +1,8 @@
 import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
 import { quicklookLayout,opportunityTone } from '/quicklook.js';
-import { PAGES,moduleForPage,resolvePage,migrateWorkspaceViews } from '/navigation.mjs';
-import { itemRarity,lootPriority,compareLootPriority,qualifiesForRun } from '/loot-priority.mjs';
+import { PAGES,moduleForPage,resolvePage,migrateWorkspaceViews,supportsSurgeFilter } from '/navigation.mjs';
+import { itemRarity,lootPriority,compareLootPriority,qualifiesForRun,PRIORITY_WEIGHTS } from '/loot-priority.mjs';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
 const QUICKLOOK_PRESETS={keys:{types:['keys']},mods:{types:['mods']}};
@@ -31,15 +31,15 @@ const paths={
 };
 const solidIcons={
  'preset-keys':'<path fill-rule="evenodd" d="M8 3a7 7 0 1 0 6.3 10H18v3h3v-3h2V8h-8.7A7 7 0 0 0 8 3Zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>',
- 'preset-mods':'<path d="M1 6h5v12H1Zm17-2h5v16h-5ZM7 8h10v8H7Zm3 8h4v5h-4Z"/>',
+ 'preset-mods':'<path d="M1 9h7l2-2h10v1h7V6h2v2h3v3H22l-2 2 2 6-3 1-3-7h-2l-1 5h-3l1-6H8l-5 4H1v-4l2-1Z"/><path d="M11 5h6v1h-6Z"/>',
  refresh:'<path d="M4.2 7.5a9 9 0 0 1 14.16-1.86L20 4v7h-7l3.45-3.45a6.3 6.3 0 0 0-9.91 1.3ZM19.8 16.5a9 9 0 0 1-14.16 1.86L4 20v-7h7l-3.45 3.45a6.3 6.3 0 0 0 9.91-1.3Z"/>',
- 'nav-loot':'<path fill-rule="evenodd" d="M8 2h8l2 5h1l2 3v12H3V10l2-3h1Zm2 3L9 7h6l-1-2Zm-3 9v2h10v-2Z"/>',
+ 'nav-loot':'<path d="M11 5H3L1 7v4l2 2h5v3H1v3h8l2-2v-5l-2-2H4V8h7Zm12 0h-8l-2 2v10l2 2h8v-3h-7V8h7Z"/><path fill-rule="evenodd" d="M28 5h6l4 14h-3l-.9-3H28l-.9 3h-3Zm.9 8h4.3L31 7.5Z"/><path d="M39 5h3l3 10 3-10h3l-4 14h-4ZM1 2h12v1H1Zm37 19h13v1H38Z"/>',
  'nav-flips':'<path d="m16 1 7 6-7 6V9H3V5h13ZM8 11v4h13v4H8v4l-7-6Z"/>',
- 'nav-crafts':'<path fill-rule="evenodd" d="M2 11 9 6v5l7-5v5h2V2h4v20H2Zm4 5v3h3v-3Zm6 0v3h3v-3Zm6 0v3h2v-3Z"/>',
+ 'nav-crafts':Array.from({length:6},(_,n)=>`<path transform="rotate(${n*60} 12 12)" d="M6.06 1.86h7.86l3.9 6.78-1.38 2.4-4.02-6.72h-7.5Z"/>`).join(''),
  'nav-items':'<path d="M2 2h8v8H2Zm12 0h8v8h-8ZM2 14h8v8H2Zm12 0h8v8h-8Z"/>',
  'nav-profile':'<circle cx="12" cy="7" r="5"/><path d="M9 14h6l6 5v3H3v-3Z"/>'
 };
-const icon=(name,cls='')=>solidIcons[name]?`<svg class="solid-icon ${cls}" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">${solidIcons[name]}</svg>`:`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.box}</svg>`;
+const icon=(name,cls='')=>solidIcons[name]?`<svg class="solid-icon ${cls}" viewBox="0 0 ${name==='nav-loot'?52:name==='preset-mods'?32:24} 24" fill="currentColor" stroke="none" aria-hidden="true">${solidIcons[name]}</svg>`:`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.box}</svg>`;
 function icons(root=document){root.querySelectorAll('[data-icon]').forEach(e=>e.innerHTML=icon(e.dataset.icon));}
 const image=(url,name='',className='',fallback='')=>/^https:\/\/assets\.tarkov\.dev\//.test(url||'')?`<img src="${esc(url)}" alt="${esc(name)}" class="${className}"${/^https:\/\/assets\.tarkov\.dev\//.test(fallback)&&fallback!==url?` data-fallback="${esc(fallback)}"`:''} loading="lazy" decoding="async">`:'';
 let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('eft-radar-live-v1')||'{}');}catch{}
@@ -131,6 +131,7 @@ function syncWorkspace(){
   $('#page-number').textContent=titles[page][0];$('#page-title').textContent=titles[page][1];$('#sort-indicator').textContent=titles[page][2];
   $$('[data-page-count]').forEach(el=>el.hidden=el.dataset.pageCount!==mod);
   $('#station-filter-label').hidden=page!=='crafts';
+  $('#surge-filter').hidden=!supportsSurgeFilter(page);
   $$('[data-module]').forEach(el=>el.hidden=el.dataset.module!==mod);
   syncQuicklook();
 }
@@ -553,7 +554,10 @@ document.addEventListener('click',event=>{
   }
   if(target.dataset.quicklookSelect){const choice=target.dataset.quicklookSelect;$$('[data-quicklook-type]').forEach(el=>el.checked=choice==='all'||(choice==='default'&&DEFAULT_SCAVENGING_CATEGORIES.includes(el.dataset.quicklookType)));}
   if(target.id==='quicklook-repack'){quicklookPlan=null;animateNext=true;render(true);}
-  if(target.dataset.filter){view().filter=target.id==='quicklook-favorites'&&view().filter==='favorites'?'all':target.dataset.filter;animateNext=true;render();persist();}
+  if(target.dataset.filter){
+    if(target.dataset.filter==='short'&&!supportsSurgeFilter(state.page))return;
+    view().filter=target.id==='quicklook-favorites'&&view().filter==='favorites'?'all':target.dataset.filter;animateNext=true;render();persist();
+  }
   if(target.dataset.market&&target.dataset.market!==state.market){
     clearTimeout(applyTimer);updateWindow.clear();
     state.market=target.dataset.market;sequence++;detailSequence++;data=null;detailRow=null;detailTrail=[];historyBook={};ledger=[];signalCache.clear();pendingSnapshot=null;pendingSignals=null;pendingLedger=null;itemSignalCache.clear();
@@ -570,7 +574,7 @@ $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').ad
 $('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');const label=state.paused?'恢复自动应用行情':'暂停自动应用行情';$('#pause').setAttribute('aria-label',label);$('#pause').title=label;toast(state.paused?'自动更新已暂停':'自动更新已恢复');queueApply();});
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
-$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级','<p class="priority-weights"><span>单格价值 <b>40%</b></span> · <span>常见程度 <b>35%</b></span> · <span>短期涨价 <b>25%</b></span></p>'));
+$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级',`<p class="priority-weights">${Object.entries({value:'单格价值',availability:'常见程度',short:'短期涨价'}).map(([key,label])=>`<span>${label} <b>${Math.round(PRIORITY_WEIGHTS[key]*100)}%</b></span>`).join(' · ')}</p>`));
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
 $('#density-button').addEventListener('click',()=>{state.density=state.density==='standard'?'compact':'standard';syncControls();if(inCloud()&&data)renderQuicklook();persist();});
 $('#profile-form').addEventListener('submit',e=>{

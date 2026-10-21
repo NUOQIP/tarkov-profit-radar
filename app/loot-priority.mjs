@@ -2,7 +2,7 @@ import {SPT_SOURCE,SPT_GROUPS} from './spt-rarity.mjs';
 export {SPT_SOURCE};
 const rarityById=new Map(Object.entries(SPT_GROUPS).flatMap(([rarity,ids])=>ids.map(id=>[id,rarity])));
 const grades={Common:{key:'Common',label:'常见',availability:1},Rare:{key:'Rare',label:'稀有',availability:.55},Superrare:{key:'Superrare',label:'超稀有',availability:.15},Unknown:{key:'Unknown',label:'未收录',availability:.5}};
-export const PRIORITY_WEIGHTS=Object.freeze({value:.4,availability:.35,short:.25});
+export const PRIORITY_WEIGHTS=Object.freeze({value:.5,availability:.4,short:.1});
 export const RUN_MIN_VALUE=30000;
 export const qualifiesForRun=row=>Number.isFinite(row.slotValue)&&row.slotValue>=RUN_MIN_VALUE;
 export function itemRarity(item={}){

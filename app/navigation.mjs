@@ -1,5 +1,6 @@
 export const PAGES = ['items','run','flips','crafts'];
 export const moduleForPage = page => page === 'items' || page === 'run' ? 'loot' : page;
+export const supportsSurgeFilter = page => page === 'items';
 
 export function resolvePage(requested, saved, market) {
   const page = requested || saved.page;
@@ -21,6 +22,6 @@ export function migrateWorkspaceViews(saved, market) {
   };
   return Object.fromEntries(PAGES.map(page => {
     const {lootScope,quicklookRange,...view} = raw[page] || {};
-    return [page,{...view,...(page==='run'&&view.filter==='short'?{filter:'all'}:{}),criteria:{...view.criteria,...(page === 'run' ? {minSlot:0} : {})}}];
+    return [page,{...view,...(!supportsSurgeFilter(page)&&view.filter==='short'?{filter:'all'}:{}),criteria:{...view.criteria,...(page === 'run' ? {minSlot:0} : {})}}];
   }));
 }

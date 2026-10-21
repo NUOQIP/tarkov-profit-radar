@@ -22,12 +22,19 @@ test('migration splits filters, removes invisible ranges, preserves user selecti
   const next=migrateWorkspaceViews({workspaceViews:{pve:m}},'pve');assert.deepEqual(next,m);
 });
 
-test('retired run surge filter resets while item filters and run favorites remain usable',()=>{
-  const saved={workspaceViews:{pve:{items:{filter:'short'},run:{filter:'short'}}}};
-  const migrated=migrateWorkspaceViews(saved,'pve');
-  assert.equal(migrated.items.filter,'short');assert.equal(migrated.run.filter,'all');
-  saved.workspaceViews.pve.run.filter='favorites';
-  assert.equal(migrateWorkspaceViews(saved,'pve').run.filter,'favorites');
+test('only items retain surge filters; retired views reset without losing favorites or conditions',()=>{
+  for(const market of ['pve','regular','pvp-season']){
+    const views={items:{filter:'short'},run:{filter:'short'},flips:{filter:'short',criteria:{budget:200000}},crafts:{filter:'short',station:'water'}};
+    const saved={workspaceViews:{[market]:views}},migrated=migrateWorkspaceViews(saved,market);
+    assert.equal(migrated.items.filter,'short');
+    for(const page of ['run','flips','crafts']){
+      assert.equal(migrated[page].filter,'all');
+      views[page].filter='favorites';
+      assert.equal(migrateWorkspaceViews(saved,market)[page].filter,'favorites');
+    }
+    assert.equal(migrated.flips.criteria.budget,200000);assert.equal(migrated.crafts.station,'water');
+    assert.deepEqual(migrateWorkspaceViews({workspaceViews:{[market]:migrated}},market),migrated);
+  }
 });
 test('new independent views do not leak category/search across pages or markets',()=>{
   const saved={workspaceViews:{pve:{items:{category:'weapon',search:'SA58'},run:{quicklookTypes:['keys'],search:'钥匙'}},regular:{run:{search:'不同市场'}}}};

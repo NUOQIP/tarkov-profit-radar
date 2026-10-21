@@ -45,6 +45,8 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 #refresh.spin{color:var(--gold)}
 #refresh.spin .solid-icon{animation:rotate 1s linear infinite}
 .workspace-nav .solid-icon,.settings-button .solid-icon{fill:currentColor;stroke:none;transition:transform .18s ease,opacity .18s ease}
+.workspace-nav button[data-page=run]>span[data-icon] svg{width:46px;height:24px}
+@media(max-width:700px){.workspace-nav button[data-page=run]>span[data-icon] svg{width:38px;height:20px}}
 .workspace-nav button:hover .solid-icon,.settings-button:hover .solid-icon{transform:translateY(-2px)}
 .settings-button{gap:8px}
 .tag.quote-risk{color:#e3b666;border-color:#d9a34744;background:#ba842014}
@@ -175,8 +177,9 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 .quicklook-preset>strong{font-size:11px;line-height:1.3;font-weight:700;white-space:nowrap}
 .preset-symbol{display:grid;place-items:center;flex:none;width:16px;height:18px}
 .preset-symbol svg{width:16px;height:16px}
-.preset-status{display:grid;place-items:center;flex:none;width:14px;height:14px;border:1px solid #26323c40;border-radius:50%}
-.preset-status span{display:grid;place-items:center}.preset-status svg{width:9px;height:9px;stroke-width:2}
+.quicklook-preset [data-icon=preset-mods]{width:23px}.quicklook-preset [data-icon=preset-mods] svg{width:23px;height:18px}
+.preset-status{display:grid;place-items:center;flex:none;width:16px;height:16px;border:1px solid #26323c40;border-radius:50%;line-height:0}
+.preset-status span{display:grid;place-items:center;grid-area:1/1;line-height:0}.quicklook-preset .preset-status svg{display:block;width:10px;height:10px;stroke-width:2}
 .preset-status .preset-check{display:none}
 .quicklook-preset[aria-pressed=true]{background:linear-gradient(115deg,#f2dea1,#e0bd6f);border-color:#ffe9b1;box-shadow:0 0 0 1px #f0d39028,0 3px 14px #d4b47020}
 .quicklook-preset[aria-pressed=true] .preset-status{background:#26323c;border-color:#26323c;color:#f6dfa5}
@@ -257,6 +260,16 @@ dialog{border-color:#7e97a448;border-radius:6px;box-shadow:0 30px 100px #0006}di
 /* Running controls share one toolbar; data notes live in the footer. */
 .standard-context{display:flex;align-items:center;gap:14px;width:100%;min-width:0}
 .standard-context>#reset-visible-filters{margin-left:auto}
+#surge-filter{position:relative;isolation:isolate;overflow:hidden;gap:7px;height:32px;margin:0 5px;padding:5px 10px 5px 7px;border:1px solid color-mix(in srgb,var(--short-ink) 28%,transparent);border-left:2px solid var(--short-ink);border-radius:3px;background:linear-gradient(110deg,color-mix(in srgb,var(--short) 76%,transparent),color-mix(in srgb,var(--short) 38%,transparent));color:var(--short-ink);font-size:11px;font-weight:600;letter-spacing:.4px;transition:background .18s,border-color .18s,box-shadow .18s}
+#surge-filter .surge-symbol{display:grid;place-items:center;width:21px;height:21px;border:1px solid color-mix(in srgb,var(--short-ink) 22%,transparent);background:color-mix(in srgb,var(--short-ink) 8%,transparent);border-radius:2px;flex:none}
+#surge-filter .surge-symbol svg{width:14px;height:14px;stroke-width:2;transition:transform .18s}
+#surge-filter .surge-status{width:4px;height:4px;border-radius:1px;background:currentColor;opacity:.4;margin-left:2px}
+#surge-filter[aria-pressed=true]{color:#fff0ec;background:linear-gradient(110deg,#a34f55,#71333e);border-color:#e99b98;box-shadow:inset 0 1px 0 #ffb2a733,0 2px 9px #6b24282b}
+#surge-filter[aria-pressed=true] .surge-symbol{border-color:#ffd6cb55;background:#ffdfd51c}
+#surge-filter[aria-pressed=true] .surge-status{opacity:1;box-shadow:0 0 6px #ffd5c580}
+#surge-filter:focus-visible{outline:2px solid var(--short-ink);outline-offset:3px}
+@media(hover:hover){#surge-filter:hover{border-color:var(--short-ink);box-shadow:0 2px 12px color-mix(in srgb,var(--short-ink) 12%,transparent)}#surge-filter:hover .surge-symbol svg{transform:translate(1px,-1px)}}
+@media(max-width:700px){#surge-filter{height:29px;padding:4px 7px 4px 5px;margin:0 3px;gap:5px;font-size:10px}#surge-filter .surge-symbol{width:18px;height:18px}#surge-filter .surge-symbol svg{width:12px;height:12px}}
 [data-page=run] .context-toolbar{height:auto;min-height:46px;gap:10px;flex-wrap:wrap;align-items:center;padding:2px 0 8px;margin-bottom:8px}
 [data-page=run] #quicklook-presets{margin:0;padding:0;border:0;background:transparent;gap:0;flex:none}
 [data-page=run] #quicklook-controls{margin:0 0 0 auto}

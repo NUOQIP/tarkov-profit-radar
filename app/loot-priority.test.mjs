@@ -37,6 +37,8 @@ test('only positive short opportunities boost priority; scores remain bounded',(
   assert.equal(lootPriority(r,{short:true,riseChange:NaN}),base);
   for(const value of [0,null,NaN,Infinity,-1])assert.equal(lootPriority(row(bulb,value)),0);
   assert.equal(lootPriority(row(bulb,1e12),{short:true,riseChange:9}),100);
+  assert.equal(lootPriority(row(bulb,300000),{short:true,riseChange:1})-lootPriority(row(bulb,300000)),10);
+  assert.ok(Math.abs(lootPriority(row('5c0530ee86f774697952d952',800000))-56)<1e-9);
   const ranked=[row(gpu,200000),row(bulb,50000)].map(r=>({...r,quicklookScore:lootPriority(r)})).sort(compareLootPriority);
   assert.equal(ranked[0].id,bulb);
 });
