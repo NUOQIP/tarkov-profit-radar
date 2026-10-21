@@ -1,4 +1,4 @@
-import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,SCAVENGING_SELECTION_VERSION,migrateScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
+import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,stationMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,SCAVENGING_SELECTION_VERSION,migrateScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
 import { quicklookLayout,opportunityTone } from '/quicklook.js';
 import { PAGES,moduleForPage,resolvePage,migrateWorkspaceViews,supportsSurgeFilter } from '/navigation.mjs';
@@ -318,7 +318,9 @@ function renderFilterSummary(){
     if(inQuicklook()&&key==='minSlot')continue;
     const n=criteria()[key];if(n)chips.push([key,typeof n==='boolean'?label:label+' '+fmt(n)+(key==='maxHours'?'h':'')]);
   }
-  $('#filter-active').hidden=!chips.length;$('#filter-active').textContent=chips.length;
+  $('#filter-label').textContent=inQuicklook()?`筛选·${v.quicklookTypes.length}`:'筛选';
+  $('#filter-button').setAttribute('aria-label',inQuicklook()?`筛选·${v.quicklookTypes.length}，已勾选 ${v.quicklookTypes.length} 种物品类型`:'筛选');
+  $('#filter-active').hidden=inQuicklook()||!chips.length;$('#filter-active').textContent=chips.length;
   $('#active-filters').hidden=!chips.length;$('#active-filters').innerHTML=chips.map(([key,label])=>`<button data-clear-filter="${key}" aria-label="移除${esc(label)}筛选">${esc(label)}${icon('x')}</button>`).join('');
 }
 
@@ -453,18 +455,29 @@ function relatedRoutes(r){
   };
   return `<section class="detail-section"><h3>相关赚钱路线${routes.length?`<span class="count">${routes.length}</span>`:''}</h3>${presetLink}${routes.slice(0,5).map(routeMarkup).join('')}${routes.length>5?`<details class="more-routes"><summary>展开其余 ${routes.length-5} 条路线</summary>${routes.slice(5).map(routeMarkup).join('')}</details>`:''}</section>`;
 }
+function executionConditions(r,showSatisfied=true){
+  const missing=r.execution?.missing||[],task=data.tasks?.[r.task];
+  return `${missing.length||showSatisfied?`<div class="condition-list">${missing.length?missing.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">当前条件满足</span>'}</div>`:''}${r.task&&!options().maxProgress?`<div class="execution-task"><label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a></div>`:''}`;
+}
+function flipExecution(r){
+  const ready=r.execution?.executable===true,missing=r.execution?.missing||[];
+  const stateLabel=ready?'条件已满足':missing.length&&missing.every(x=>['含延迟报价','待估值'].includes(x))?'需核对报价':'条件未满足';
+  return `<section class="trade-execution" aria-label="本次倒货"><div class="trade-execution-heading"><h3>本次倒货</h3><span class="execution-state ${ready?'ready':'pending'}">${icon(ready?'check':'info')}${stateLabel}</span></div>
+    <div class="trade-route"><div class="route-step"><span class="route-step-icon">${icon(r.isBarter?'box':'backpack')}</span><span><small>准备</small><strong>${r.isBarter?'兑换材料':'采购资金'}</strong></span></div>${icon('chevron','route-arrow')}<div class="route-step"><span><strong>${esc(r.trader?.name||'未知商人')}</strong><small>${Number.isFinite(r.level)?`LL${r.level} · `:''}${r.isBarter?'兑换':'直购'} ×${fmt(r.count)}</small></span></div>${icon('chevron','route-arrow')}<div class="route-step"><span><strong>跳蚤</strong><small>出售 ×${fmt(r.count)}</small></span></div></div>
+    <div class="trade-limit"><span>每轮限购</span><b>${Number.isFinite(r.limit)&&r.limit>0?fmt(r.limit):'未知'}</b></div>${executionConditions(r,false)}</section>`;
+}
 function detailMarkup(r){
   const i=r.item,loot=r.kind==='loot',craft=r.kind==='craft',s=signal(r);
   const materialRows=(r.recipe||[]).map(m=>`<button class="cost-material" data-open="${esc(m.item.id)}">${image(m.item.image)}<span class="cost-material-name"><strong>${esc(m.item.name)} <em>×${m.count}</em></strong><small>${m.tool?'可复用工具':`${esc(m.source)} · 单价 ₽${fmt(m.unitCost)}`}</small></span><span class="cost-material-value"><b>${m.tool?(m.capital===null?'待核价':'₽'+fmt(m.capital)):'₽'+fmt(m.cost)}</b>${m.tool?'<small>首购另计</small>':''}</span>${icon('chevron')}</button>`).join('');
-  const conditions=r.execution?.missing||[],task=data.tasks?.[r.task];
   return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}</div></div></div>
   <div class="detail-actions">${detailTrail.length?'<button id="detail-back">← 返回</button>':''}<button data-favorite="${i.id}">${icon('star')}${state.favorites[state.market].includes(i.id)?'已收藏':'收藏'}</button><button id="share-item">${icon('copy')}复制链接</button></div>
   <div class="detail-metrics"><div class="detail-metric"><small>${loot?'净利 / 个':craft?'最终净利润 / 批':'预计净利润 / 次'}</small><strong class="${!loot&&r.profit<0?'negative':''}">₽${fmt(loot?r.net:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'每格净到手':craft?'每批产出净到手':'预计净回款'}</small><strong>₽${fmt(loot?r.slotValue:r.net)}</strong></div></div>
-  ${loot?channelComparison(r):`<section class="purchase-detail"><div class="trade-summary"><span>${craft?'材料成本':'进货成本'} <b>₽${fmt(r.purchase)}</b></span><span>上架手续费 <b>₽${fmt(r.fee)}</b></span></div>${materialRows?`<div class="cost-materials">${materialRows}</div>`:`<div class="purchase-source">${esc(r.trader?.name||'商人')} · ${r.isBarter?'兑换':'直购'} ×${r.count}</div>`}${craft?`<div class="craft-reference"><span>制作 ${duration(r.seconds)} · 产出 ×${r.count}</span><span>参考时薪 ${sign(r.hourly)}</span></div>`:''}</section>`}
+  ${r.kind==='flip'?flipExecution(r):''}
+  ${loot?channelComparison(r):`<section class="purchase-detail"><div class="trade-summary"><span>${craft?'材料成本':'进货成本'} <b>₽${fmt(r.purchase)}</b></span><span>上架手续费 <b>₽${fmt(r.fee)}</b></span></div>${materialRows?`<div class="cost-materials">${materialRows}</div>`:''}${craft?`<div class="craft-reference"><span>制作 ${duration(r.seconds)} · 产出 ×${r.count}</span><span>参考时薪 ${sign(r.hourly)}</span></div>`:''}</section>`}
   <div class="quote-reference"><span>最低价 <b>₽${fmt(i.price)}</b></span><span>24h均价 <b>₽${fmt(i.average)}</b></span><span>${fmt(i.offers)} 条报价</span></div>
   <section class="detail-section"><h3>价格走势<div class="chart-controls"><button data-days="7" class="${chartDays===7?'active':''}">7日</button><button data-days="30" class="${chartDays===30?'active':''}">30日</button></div></h3><div id="history-content"></div></section>
   ${relatedRoutes(r)}
-  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">当前条件满足</span>'}</div>${r.task&&!options().maxProgress?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}</section>`:''}
+  ${craft?`<section class="detail-section"><h3>执行条件</h3>${executionConditions(r)}</section>`:''}
   <div class="detail-source"><span>${i.scan?clock(i.scan):'报价时间未知'}</span><a class="source-link" href="https://tarkov.dev/item/${encodeURIComponent(i.slug)}?gameMode=${state.market}" target="_blank" rel="noreferrer">上游资料 ↗</a></div>`;
 }
 async function openDetail(id,remember=true){
@@ -489,23 +502,22 @@ function taskSelectionSummary(){
   $('#tasks-all').checked=all.length>0&&count===all.length;$('#tasks-all').indeterminate=count>0&&count<all.length;$('#task-count').textContent=`${count} / ${all.length}`;
 }
 function renderProfileInputs(p){
-  $('#management').value=p.management;
-  $('#progress-description').textContent=hasFullProgress(p,data)?'满商人 · 全任务完成':'自定义商人与任务';
   const selectLevels=(current,max)=>Array.from({length:max+1},(_,n)=>`<option value="${n}" ${current===n?'selected':''}>${n?'LL '+n:'未解锁'}</option>`).join('');
-  $('#station-settings').innerHTML=productionStations(data).map(st=>`<label class="station-setting"><span>${image(st.image)}<span>${esc(st.name)}</span></span><input type="checkbox" data-production="${st.id}" aria-label="${esc(st.name)}参与推荐" ${p.excludedStations.includes(st.id)?'':'checked'}></label>`).join('');
+  $('#station-settings').innerHTML=productionStations(data).map(st=>`<div class="station-setting"><label class="station-identity"><input type="checkbox" data-production="${st.id}" aria-label="${esc(st.name)}参与推荐" ${p.excludedStations.includes(st.id)?'':'checked'}>${image(st.image)}<span>${esc(st.name)}</span></label><select data-station="${st.id}" aria-label="${esc(st.name)}等级">${Array.from({length:stationMaxLevel(st,data)+1},(_,n)=>`<option value="${n}" ${p.stationLevels[st.id]===n?'selected':''}>${n?`Lv.${n}`:'未建造'}</option>`).join('')}</select></div>`).join('');
   $('#trader-settings').innerHTML=tradingTraders(data).map(t=>`<label><span>${image(t.image)}${esc(t.name)}</span><select data-trader="${t.id}" aria-label="${esc(t.name)}忠诚度">${selectLevels(p.traderLevels[t.id]||0,traderMaxLevel(t))}</select></label>`).join('');
   $('#task-settings').innerHTML=profileTaskIds(data).sort((a,b)=>(data.tasks?.[a]?.name||a).localeCompare(data.tasks?.[b]?.name||b,'zh-CN')).map(id=>`<label data-task-label><input type="checkbox" data-task="${id}" ${p.completedTasks.includes(id)?'checked':''}><span>${esc(data.tasks?.[id]?.name||id)}</span></label>`).join('');
   $('#task-search').value='';$('#tasks-empty').hidden=true;taskSelectionSummary();
 }
 function profileFromForm(){
-  return resolveTradingProfile({...state.profiles[state.market],maxProgress:false,progressConfigured:true,management:$('#management').value,
+  return resolveTradingProfile({...state.profiles[state.market],maxProgress:false,progressConfigured:true,
     traderLevels:{...state.profiles[state.market].traderLevels,...Object.fromEntries($$('[data-trader]').map(e=>[e.dataset.trader,Number(e.value)]))},
+    stationLevels:{...state.profiles[state.market].stationLevels,...Object.fromEntries($$('[data-station]').map(e=>[e.dataset.station,Number(e.value)]))},
     excludedStations:$$('[data-production]').filter(e=>!e.checked).map(e=>e.dataset.production),
     completedTasks:$$('[data-task]').filter(e=>e.checked).map(e=>e.dataset.task)},data);
 }
 function showSettings(){
   if(!data){toast('行情加载后即可配置角色条件。');return;}
-  $('#profile-market').textContent=MARKETS[state.market];renderProfileInputs(state.profiles[state.market]);settingsTab('player');$('#settings').showModal();
+  $('#profile-market').textContent=MARKETS[state.market];renderProfileInputs(state.profiles[state.market]);settingsTab('stations');$('#settings').showModal();
 }
 function showInfo(title,html){$('#info-title').textContent=title;$('#info-content').innerHTML=html;$('#info-dialog').showModal();}
 function toggleFavorite(id){const list=state.favorites[state.market],index=list.indexOf(id);if(index<0)list.push(id);else list.splice(index,1);persist();render(true);if(detailRow?.item.id===id){const button=$('#detail-content [data-favorite]');if(button)button.innerHTML=icon('star')+(index<0?'已收藏':'收藏');}toast(index<0?'已收藏；收藏页仍按价值排序。':'已取消收藏');}
@@ -573,7 +585,7 @@ $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').ad
 $('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');const label=state.paused?'恢复自动应用行情':'暂停自动应用行情';$('#pause').setAttribute('aria-label',label);$('#pause').title=label;toast(state.paused?'自动更新已暂停':'自动更新已恢复');queueApply();});
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
-$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级',`<p class="priority-weights">${Object.entries({value:'单格价值',availability:'常见程度',short:'短期涨价'}).map(([key,label])=>`<span>${label} <b>${Math.round(PRIORITY_WEIGHTS[key]*100)}%</b></span>`).join(' · ')}</p>`));
+$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级',`<p class="priority-weights">${Object.entries({availability:'常见程度',value:'单格价值',short:'短期涨价'}).map(([key,label])=>`<span>${label} <b>${Math.round(PRIORITY_WEIGHTS[key]*100)}%</b></span>`).join(' · ')}</p>`));
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
 $('#density-button').addEventListener('click',()=>{state.density=state.density==='standard'?'compact':'standard';syncControls();if(inCloud()&&data)renderQuicklook();persist();});
 $('#profile-form').addEventListener('submit',e=>{
@@ -581,7 +593,8 @@ $('#profile-form').addEventListener('submit',e=>{
   state.profiles[state.market]=profileFromForm();persist();rebuild();render(true);closePanel($('#settings'),'save');toast('已按你的条件重新计算');
 });
 $('#reset-progress').addEventListener('click',()=>renderProfileInputs(resolveTradingProfile(profileFromForm(),data,true)));
-$('#stations-max').addEventListener('click',()=>$$('[data-production]').forEach(e=>e.checked=true));
+$('#stations-all').addEventListener('click',()=>$$('[data-production]').forEach(e=>e.checked=true));
+$('#stations-max').addEventListener('click',()=>$$('[data-station]').forEach(e=>e.value=stationMaxLevel(data.stations[e.dataset.station],data)));
 $('#traders-max').addEventListener('click',()=>$$('[data-trader]').forEach(e=>e.value=traderMaxLevel(data.traders[e.dataset.trader])));
 $('#tasks-all').addEventListener('change',e=>{$$('[data-task]').forEach(t=>t.checked=e.target.checked);taskSelectionSummary();});
 $('#task-settings').addEventListener('change',taskSelectionSummary);

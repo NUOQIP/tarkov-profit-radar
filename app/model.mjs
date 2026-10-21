@@ -82,8 +82,13 @@ export function hasFullProgress(profile,data) {
 }
 export function resolveTradingProfile(input,data,reset=false) {
   const p=resolvePlayerProfile(input,data,reset);
-  p.playerLevel=79;p.intelligence=3;p.edition='';p.materialMode='buy';
-  p.stationLevels=Object.fromEntries(values(data.stations).map(s=>[s.id,stationMaxLevel(s,data)]));
+  p.playerLevel=79;p.management=0;p.edition='';p.materialMode='buy';
+  p.stationLevels=Object.fromEntries(values(data.stations).map(s=>{
+    const max=stationMaxLevel(s,data);
+    return [s.id,Math.min(max,Math.floor(p.stationLevels[s.id]??max))];
+  }));
+  const intelligence=values(data.stations).find(s=>s.slug==='intelligence-center');
+  p.intelligence=intelligence?p.stationLevels[intelligence.id]:3;
   if(reset)p.excludedStations=[];
   return p;
 }

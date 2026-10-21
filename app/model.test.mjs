@@ -85,12 +85,31 @@ test('all offers retains unknown-price and unknown-cost routes without inventing
   assert.equal(estimate.net,90000);assert.equal(estimate.profit,null);
 });
 
-test('simplified settings fix player and facility levels while retaining trader, task and production choices',()=>{
+test('trading settings retain chosen facility levels, traders, tasks and production choices',()=>{
   const data=dataset([],{traders:{t:{id:'t',slug:'mechanic',levels:[{level:4}]},npc:{id:'npc',slug:'lightkeeper',levels:[{level:1}]}},stations:{s:{id:'s',slug:'workbench',maxLevel:3},wall:{id:'wall',slug:'defective-wall',maxLevel:6}},crafts:[{station:'s',duration:60}]});
   const p=resolveTradingProfile({maxProgress:false,progressConfigured:true,playerLevel:5,stationLevels:{s:1},traderLevels:{t:2},completedTasks:[],management:20,materialMode:'owned',edition:'unheard_edition',excludedStations:['s']},data);
-  assert.equal(p.playerLevel,79);assert.equal(p.stationLevels.s,3);assert.equal(p.intelligence,3);assert.equal(p.materialMode,'buy');assert.equal(p.edition,'');
-  assert.equal(p.traderLevels.t,2);assert.equal(p.management,20);assert.deepEqual(p.excludedStations,['s']);
+  assert.equal(p.playerLevel,79);assert.equal(p.stationLevels.s,1);assert.equal(p.stationLevels.wall,6);assert.equal(p.intelligence,3);assert.equal(p.materialMode,'buy');assert.equal(p.edition,'');
+  assert.equal(p.traderLevels.t,2);assert.equal(p.management,0);assert.deepEqual(p.excludedStations,['s']);
   assert.deepEqual(tradingTraders(data).map(t=>t.id),['t']);assert.deepEqual(productionStations(data).map(s=>s.id),['s']);
+});
+
+test('saved production levels survive reload and control recipes and intelligence-center fees',()=>{
+  const data=dataset([item('product'),item('material',{price:10000,average:10000})],{
+    stations:{s:{id:'s',name:'工作台',slug:'workbench',maxLevel:3},intel:{id:'intel',name:'情报中心',slug:'intelligence-center',maxLevel:3}},
+    crafts:[{id:'c',station:'s',duration:3600,level:2,productItem:{item:'product',count:1},requiredItems:[{item:'material',count:1}]}]
+  });
+  const full=resolveTradingProfile({},data),fullCraft=collectCrafts(data,full,now)[0];
+  assert.deepEqual(full.stationLevels,{s:3,intel:3});assert.ok(fullCraft.execution.executable);
+  const custom=resolveTradingProfile({...full,stationLevels:{s:1,intel:0}},data);
+  const reloaded=resolveTradingProfile(JSON.parse(JSON.stringify(custom)),data);
+  assert.deepEqual(reloaded.stationLevels,{s:1,intel:0});assert.equal(reloaded.intelligence,0);
+  const locked=collectCrafts(data,reloaded,now)[0];
+  assert.deepEqual(locked.execution.missing,['工作台 Lv.2']);assert.ok(locked.fee>fullCraft.fee);
+  assert.equal(collectCrafts(data,{...reloaded,onlyExecutable:true},now).length,0);
+  assert.equal(collectCrafts(data,{...resolveTradingProfile({...custom,stationLevels:{s:2,intel:0}},data),onlyExecutable:true},now).length,1);
+  const reset=resolveTradingProfile({...custom,excludedStations:['s']},data,true);
+  assert.deepEqual(reset.stationLevels,{s:3,intel:3});assert.equal(reset.intelligence,3);assert.deepEqual(reset.excludedStations,[]);
+  assert.deepEqual(resolveTradingProfile({...custom,stationLevels:{s:9,intel:1.7}},data).stationLevels,{s:3,intel:1});
 });
 test('normalization preserves every equipment category and resolves actual translations',()=>{
   const raw = [
