@@ -15,7 +15,7 @@ const files=new Map([
   ['/quicklook.js',[join(here,'quicklook.mjs'),'text/javascript']],
   ['/favicon.svg',[join(root,'public','favicon.svg'),'image/svg+xml']]
 ]);
-const server=createRadarServer(store,files),port=Number(process.env.PORT||8787),host=process.env.HOST||'127.0.0.1';
+const server=createRadarServer(store,files,{trustLoopbackProxy:process.env.TRUST_PROXY==='loopback'}),port=Number(process.env.PORT||8787),host=process.env.HOST||'127.0.0.1';
 server.listen(port,host,()=>{console.log('http://'+host+':'+port);warm();});
 server.on('error',error=>{console.error(error.message);process.exitCode=1;});
 let harvesting=false,stopping=false;

@@ -1,0 +1,29 @@
+# Replace radar.example.cn with the purchased domain, and use its real certificate.
+# Only enable after the site's domain, filing (where required), and HTTPS are ready.
+server {
+    listen 80;
+    server_name radar.example.cn;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/tarkov-acme; }
+    location / { return 301 https://radar.example.cn$request_uri; }
+}
+server {
+    listen 443 ssl;
+    server_name radar.example.cn;
+    ssl_certificate /etc/letsencrypt/live/radar.example.cn/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/radar.example.cn/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    server_tokens off;
+    access_log /var/log/nginx/tarkov-radar.access.log;
+    error_log /var/log/nginx/tarkov-radar.error.log;
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+    }
+}

@@ -1,0 +1,34 @@
+[Unit]
+Description=Tarkov Profit Radar
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=tarkov-radar
+Group=tarkov-radar
+WorkingDirectory=/opt/tarkov-radar/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8787
+Environment=DATA_DIR=/var/lib/tarkov-radar
+Environment=TRUST_PROXY=loopback
+EnvironmentFile=-/etc/tarkov-radar.env
+ExecStart=/opt/tarkov-radar/node/bin/node --max-old-space-size=768 app/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tarkov-radar
+UMask=0027
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tarkov-radar
+
+[Install]
+WantedBy=multi-user.target

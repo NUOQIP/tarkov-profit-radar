@@ -3,14 +3,21 @@ import { readFile,stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
+import { isIP } from 'node:net';
 import { handleApi } from './data-service.mjs';
 const zip=promisify(gzip);
 
-export function createRadarServer(store,files) {
+export function clientAddress(request,trustLoopbackProxy=false) {
+  const peer=request.socket.remoteAddress||'unknown',forwarded=request.headers['x-real-ip'];
+  const loopback=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(peer);
+  return trustLoopbackProxy&&loopback&&typeof forwarded==='string'&&isIP(forwarded)?forwarded:peer;
+}
+
+export function createRadarServer(store,files,{trustLoopbackProxy=false}={}) {
   const assets=new Map(),compressed=new Map(),clients=new Map();
   const server=createServer(async(req,res)=>{
     try{
-      const url=new URL(req.url,'http://localhost'),now=Date.now(),ip=req.socket.remoteAddress;
+      const url=new URL(req.url,'http://localhost'),now=Date.now(),ip=clientAddress(req,trustLoopbackProxy);
       const rate=clients.get(ip);
       if(!rate||now-rate.at>60000)clients.set(ip,{at:now,count:1});
       else if(++rate.count>300){res.writeHead(429,{'Retry-After':'60'});return res.end('Too many requests');}

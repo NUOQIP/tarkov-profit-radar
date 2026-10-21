@@ -1,0 +1,4 @@
+deploy/tencent/*.sh text eol=lf
+deploy/tencent/*.service text eol=lf
+deploy/tencent/*.timer text eol=lf
+deploy/tencent/*.conf* text eol=lf

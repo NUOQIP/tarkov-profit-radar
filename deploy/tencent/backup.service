@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up completed Tarkov Radar profit-history days
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/tarkov-radar/current/deploy/tencent/backup.sh
+UMask=0077
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/backups/tarkov-radar
