@@ -15,10 +15,19 @@ test('migration splits filters, removes invisible ranges, preserves user selecti
   const original=structuredClone(saved),m=migrateWorkspaceViews(saved,'pve');
   assert.deepEqual(Object.keys(m),PAGES);
   assert.equal(m.items.search,'');assert.equal(m.run.search,'灯泡');
+  assert.equal(m.run.filter,'all');
   assert.equal(m.run.criteria.minSlot,0);assert.equal(m.run.criteria.freshOnly,true);
   assert.deepEqual(m.run.quicklookTypes,['barter']);assert.equal(m.run.quicklookRange,undefined);
   assert.equal(m.crafts.station,'water');assert.deepEqual(saved,original);
   const next=migrateWorkspaceViews({workspaceViews:{pve:m}},'pve');assert.deepEqual(next,m);
+});
+
+test('retired run surge filter resets while item filters and run favorites remain usable',()=>{
+  const saved={workspaceViews:{pve:{items:{filter:'short'},run:{filter:'short'}}}};
+  const migrated=migrateWorkspaceViews(saved,'pve');
+  assert.equal(migrated.items.filter,'short');assert.equal(migrated.run.filter,'all');
+  saved.workspaceViews.pve.run.filter='favorites';
+  assert.equal(migrateWorkspaceViews(saved,'pve').run.filter,'favorites');
 });
 test('new independent views do not leak category/search across pages or markets',()=>{
   const saved={workspaceViews:{pve:{items:{category:'weapon',search:'SA58'},run:{quicklookTypes:['keys'],search:'钥匙'}},regular:{run:{search:'不同市场'}}}};

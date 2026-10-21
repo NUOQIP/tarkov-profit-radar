@@ -36,6 +36,27 @@ test('price updates keep unchanged tiers in place and promote newly valuable ite
 test('cloud excludes unknown and nonpositive values and handles empty results',()=>{
   assert.deepEqual(quicklookLayout([{id:'missing',slotValue:null},{id:'zero',slotValue:0},{id:'bad',slotValue:NaN}]).cells,[]);
 });
+
+test('fine cloud cells make ordinary finds smaller while keeping nine-cell desktop highlights',()=>{
+  const plan=quicklookLayout(items,{width:1250,height:550,showAll:true});valid(plan);
+  const big=plan.cells.find(c=>c.tier==='large'),small=plan.cells.find(c=>c.tier==='small');
+  assert.equal(big.w*big.h,9);assert.equal(small.w*small.h,1);
+  assert.ok(plan.rowHeight<=88);assert.ok(plan.columns>=15);
+  assert.ok(plan.cells.filter(c=>(c.y+c.h)*(plan.rowHeight+7)<=550).length>=40);
+  const compact=quicklookLayout(items,{width:1250,height:550,compact:true,showAll:true});
+  assert.ok(compact.rowHeight<plan.rowHeight);assert.ok(compact.columns>plan.columns);
+});
+
+test('tile sizes respond to score separation even when the ranking is unchanged',()=>{
+  const sample=items.slice(0,30).map((r,i)=>({...r,quicklookScore:100-i}));
+  const size={width:1250,height:550,showAll:true},close=quicklookLayout(sample,size);
+  const gap=quicklookLayout(sample.map((r,i)=>({...r,quicklookScore:i===0?100:30-i*.1})),{...size,previous:close});
+  valid(gap);assert.equal(gap.cells.length,sample.length);
+  const before=close.cells.find(c=>c.id==='001'),after=gap.cells.find(c=>c.id==='001');
+  assert.ok(before.w*before.h>after.w*after.h);
+  const equal=quicklookLayout(sample.map(r=>({...r,quicklookScore:50})),size);
+  assert.ok(equal.cells.every(c=>c.tier==='small'));
+});
 test('unified cloud fills available space with compact single-cell tiles',()=>{
   for(const width of [100,230,330,800,1250,1900])for(const height of [100,300,600,1000])for(const compact of [false,true]){
     const plan=quicklookLayout(items,{width,height,compact,spotlight:false});valid(plan);

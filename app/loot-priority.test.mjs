@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {itemRarity,lootPriority,compareLootPriority} from './loot-priority.mjs';
+import {itemRarity,lootPriority,compareLootPriority,qualifiesForRun} from './loot-priority.mjs';
 import {SPT_SOURCE,SPT_GROUPS} from './spt-rarity.mjs';
 const bulb='5d1b392c86f77425243e98fe',gpu='57347ca924597744596b4e71';
 const row=(id,value)=>({id,item:{id},slotValue:value});
+
+test('run value floor includes exactly 30k per slot and rejects low/unknown values',()=>{
+  for(const value of [0,29999,29999.99,null,NaN,Infinity,-1])assert.equal(qualifiesForRun(row(bulb,value)),false);
+  for(const value of [30000,30000.01,50000,1e7])assert.equal(qualifiesForRun(row(bulb,value)),true);
+  assert.equal(qualifiesForRun({...row(bulb,20000),net:60000}),false);
+});
 
 test('SPT reference maps known examples, weapon templates and missing entries',()=>{
   assert.equal(itemRarity({id:bulb}).key,'Common');

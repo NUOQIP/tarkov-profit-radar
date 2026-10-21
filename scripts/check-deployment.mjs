@@ -10,6 +10,7 @@ async function get(path,headers={}){
 function ensure(condition,message){if(!condition)throw new Error(message);}
 const health=await get('/api/health');
 ensure(health.response.ok&&JSON.parse(health.body).service==='tarkov-profit-radar','Health check failed');
+for(const path of ['/api/spt-status','/api/spt-check'])ensure((await get(path)).response.status===404,'SPT management must not be public');
 const rows=[];
 for(const market of ['pve','regular','pvp-season']){
   const first=await get('/api/dashboard?market='+market,{'Accept-Encoding':'gzip'});

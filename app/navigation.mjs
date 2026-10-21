@@ -21,6 +21,6 @@ export function migrateWorkspaceViews(saved, market) {
   };
   return Object.fromEntries(PAGES.map(page => {
     const {lootScope,quicklookRange,...view} = raw[page] || {};
-    return [page,{...view,criteria:{...view.criteria,...(page === 'run' ? {minSlot:0} : {})}}];
+    return [page,{...view,...(page==='run'&&view.filter==='short'?{filter:'all'}:{}),criteria:{...view.criteria,...(page === 'run' ? {minSlot:0} : {})}}];
   }));
 }

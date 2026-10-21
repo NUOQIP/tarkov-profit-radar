@@ -1,5 +1,6 @@
 import { MARKETS, MODEL_VERSION, EVENT_METADATA_VERSION, applyEventMetadata, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
 import { DASHBOARD_VERSION, compactSignals, makeDashboard } from './dashboard.mjs';
+import { checkSptUpstream } from './spt-upstream.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
   set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
@@ -259,7 +260,7 @@ export async function handleApi(request,store,context={}) {
     if(url.pathname==='/api/signals')return json((await dashboard(store,market,context.waitUntil)).signals);
     if(url.pathname==='/api/ledger')return json(await profitHistory(store,market));
     if(url.pathname==='/api/collect'){
-      await refreshInBackground(store,market);
+      await Promise.all([refreshInBackground(store,market),checkSptUpstream(store).catch(()=>{})]);
       const ready=await dashboard(store,market);
       return json({market,fetchedAt:ready.snapshot.fetchedAt,warning:ready.snapshot.warning||null,historyChecked:ready.signals.checked,historyTotal:ready.signals.total});
     }

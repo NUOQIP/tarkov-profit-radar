@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { recordDay,handleApi,r2Store,snapshot } from './data-service.mjs';
 import { MODEL_VERSION } from './model.mjs';
+import { SPT_CHECK_KEY } from './spt-upstream.mjs';
+import { SPT_SOURCE } from './spt-rarity.mjs';
 const now=Date.parse('2026-10-21T03:00:00Z');
 function memoryStore(){
   const entries=new Map();
@@ -21,6 +23,19 @@ test('public API validates market, item ID and method before contacting source',
     const result=await handleApi(new Request('https://radar.example'+path,{method}),store);assert.equal(result.status,status);
   }
   assert.equal(store.entries.size,0);
+});
+
+test('SPT check results and operations are not exposed through the player API',async()=>{
+  const store=memoryStore();
+  const at=new Date().toISOString(),later=new Date(Date.now()+600000).toISOString();
+  await store.write(SPT_CHECK_KEY,{latest:{commit:SPT_SOURCE.commit,date:at},checkedAt:at,nextCheckAt:later,nextManualAt:later});
+  for(const path of ['/api/spt-status','/api/spt-check']){
+    const result=await handleApi(new Request('https://radar.example'+path),store);
+    assert.equal(result.status,404);
+    assert.deepEqual(await result.json(),{error:'接口不存在'});
+  }
+  assert.equal(store.entries.size,1);
+  assert.equal((await store.read(SPT_CHECK_KEY)).checkedAt,at);
 });
 
 test('craft ledger stores net money per batch with the same full-progress fee basis as the UI',async()=>{

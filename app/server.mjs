@@ -4,6 +4,7 @@ import { collectMarket,dashboard } from './data-service.mjs';
 import { MARKETS } from './model.mjs';
 import { localStore } from './local-store.mjs';
 import { createRadarServer } from './http-server.mjs';
+import { checkSptUpstream } from './spt-upstream.mjs';
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'..');
 const store=localStore(resolve(process.env.DATA_DIR||join(root,'.cache','v2')));
 const files=new Map([
@@ -20,7 +21,7 @@ const files=new Map([
   ['/favicon.svg',[join(root,'public','favicon.svg'),'image/svg+xml']]
 ]);
 const server=createRadarServer(store,files,{trustLoopbackProxy:process.env.TRUST_PROXY==='loopback'}),port=Number(process.env.PORT||8787),host=process.env.HOST||'127.0.0.1';
-server.listen(port,host,()=>{console.log('http://'+host+':'+port);warm();});
+server.listen(port,host,()=>{console.log('http://'+host+':'+port);warm();checkSpt();});
 server.on('error',error=>{console.error(error.message);process.exitCode=1;});
 let harvesting=false,stopping=false;
 async function warm(){
@@ -36,5 +37,7 @@ async function harvest(){
   finally{harvesting=false;}
 }
 const timer=setInterval(harvest,300000);timer.unref();
-function shutdown(){stopping=true;clearInterval(timer);server.close(()=>process.exit(0));server.closeIdleConnections();setTimeout(()=>process.exit(0),5000).unref();}
+function checkSpt(){if(!stopping)checkSptUpstream(store).catch(error=>console.error('SPT check: '+error.message));}
+const sptTimer=setInterval(checkSpt,3600000);sptTimer.unref();
+function shutdown(){stopping=true;clearInterval(timer);clearInterval(sptTimer);server.close(()=>process.exit(0));server.closeIdleConnections();setTimeout(()=>process.exit(0),5000).unref();}
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);

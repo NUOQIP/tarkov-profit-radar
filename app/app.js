@@ -2,7 +2,7 @@ import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collec
 import { createUpdateWindow } from '/update-window.js';
 import { quicklookLayout,opportunityTone } from '/quicklook.js';
 import { PAGES,moduleForPage,resolvePage,migrateWorkspaceViews } from '/navigation.mjs';
-import { itemRarity,lootPriority,compareLootPriority,SPT_SOURCE } from '/loot-priority.mjs';
+import { itemRarity,lootPriority,compareLootPriority,qualifiesForRun } from '/loot-priority.mjs';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
 const QUICKLOOK_PRESETS={keys:{types:['keys']},mods:{types:['mods']}};
@@ -138,13 +138,15 @@ function syncQuicklook(){
   const active=inQuicklook(),cloud=inCloud();
   document.body.dataset.quicklook=cloud?'cloud':active?'list':'off';
   $('#quicklook-controls').hidden=!active;$('#quicklook-presets').hidden=!active;
+  $('#standard-context').hidden=active;$('#run-data-controls').hidden=!active;
   if(active){
-    const v=view();$('#quicklook-type-count').textContent=v.quicklookTypes.length;
-    $('#quicklook-types-button').title=v.quicklookTypes.map(k=>SCAVENGING_CATEGORIES[k]).join('、')||'选择要显示的物品类型';
+    const v=view();
     $$('[data-quicklook-preset]').forEach(b=>b.setAttribute('aria-pressed',String(matchesQuicklookPreset(v,QUICKLOOK_PRESETS[b.dataset.quicklookPreset]))));
   }
   $$('[data-quicklook-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quicklookView===view().quicklookView)));
   $('#quicklook-repack').hidden=!cloud;
+  $('#quicklook-favorites').title=view().filter==='favorites'?'取消仅看收藏':'仅看收藏';
+  $('#quicklook-favorites').setAttribute('aria-label',$('#quicklook-favorites').title);
   $('#loot').classList.toggle('quicklook-view',cloud);
   $('#loot').setAttribute('aria-label',active?'跑刀速览物品':'物品一览');
 }
@@ -177,7 +179,7 @@ function signal(row){
 const aliases={ledx:'ledx',gpu:'显卡',bitcoin:'比特币',sugar:'白糖',water:'水',filter:'滤芯',led:'ledx',xianka:'显卡',baitang:'白糖',lvxin:'滤芯',shuixing:'水',yaoshi:'钥匙',yiliaobao:'医疗包',zhentou:'注射器'};
 function matches(row){
   const v=view(),c=criteria(),i=row.item,quick=row.kind==='loot'&&inQuicklook();
-  if(quick&&!isScavengingItem(i,v.quicklookTypes))return false;
+  if(quick&&(!qualifiesForRun(row)||!isScavengingItem(i,v.quicklookTypes)))return false;
   if(row.kind==='craft'&&v.station!=='all'&&row.station?.id!==v.station)return false;
   if(!quick&&v.category!=='all'&&v.category!==i.category)return false;
   if(v.filter==='favorites'&&!state.favorites[state.market].includes(i.id))return false;
@@ -203,6 +205,7 @@ function tags(r,s){
 function metric(label,value){return `<div><label>${label}</label><b>${value}</b></div>`;}
 function quicklookTile(r,cell,index){
   const i=r.item,s=signal(r),rarity=itemRarity(i),tone=opportunityTone(r,s),old=quicklookPrices.get(r.id);
+  const small=cell.tier==='small';
   const amount=r.slotValue>=10000?(Math.round(r.slotValue/1000)/10).toLocaleString('zh-CN',{maximumFractionDigits:1}):fmt(r.slotValue);
   const unit=r.slotValue>=10000?'万':'₽';
   const packCount=i.types.includes('ammoBox')?(i.containsItems||[]).reduce((sum,p)=>sum+p.count,0):0;
@@ -213,11 +216,11 @@ function quicklookTile(r,cell,index){
   const status=s.short?`<span class="cloud-signal">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}</span>`:s.long?'<span class="cloud-signal">长期高值</span>':rarity.key!=='Unknown'?`<span class="cloud-signal rarity-label">${rarity.label}</span>`:'';
   const flag=risk?`<span class="cloud-risk" title="当前仅 ${i.offers} 条报价，可能存在虚标">报价 ${i.offers}</span>`:'';
   const note=traderWins?`<span class="cloud-vendor">卖 ${esc(vendor)}</span>`:r.fleaNet===null&&vendor?`<span class="cloud-vendor">${esc(vendor)} 回收</span>`:'';
-  return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · SPT ${rarity.label} · 优先级 ${Math.round(r.quicklookScore)} · 单格净值 ₽${fmt(r.slotValue)}">
-    <span class="cloud-topline">${status}${flag}</span>
+  return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · 单格净值 ₽${fmt(r.slotValue)}">
+    ${small?'':`<span class="cloud-topline">${status}${flag}</span>`}
     <span class="cloud-art">${image(i.art||i.image,'','cloud-image',i.image)}</span>
-    <span class="cloud-caption"><span class="cloud-name">${esc(name)}</span><span class="cloud-value"><strong>${amount}</strong><span>${unit}<small>/ 格</small></span></span>${note}</span>
-    <span class="cloud-open" aria-hidden="true">${icon('chevron')}</span>
+    <span class="cloud-caption"><span class="cloud-name">${esc(name)}</span><span class="cloud-value"><strong>${amount}</strong><span>${unit}${small?'':'<small>/ 格</small>'}</span></span>${small?'':note}</span>
+    ${small?'':`<span class="cloud-open" aria-hidden="true">${icon('chevron')}</span>`}
   </button>`;
 }
 function renderQuicklook(){
@@ -228,8 +231,8 @@ function renderQuicklook(){
   const grid=root.querySelector('.quicklook-grid'),board=grid.parentElement;
   const compact=state.density==='compact',height=board.clientHeight-20;
   const fit=quicklookLayout([],{width:board.clientWidth-20,height,compact});
-  const rowHeight=compact?112:124;
   const plan=quicklookLayout(visible.loot,{width:board.clientWidth-20,height,compact,showAll:true,previous});
+  const rowHeight=plan.rowHeight;
   grid.style.height=(plan.rows*rowHeight+7*(plan.rows-1)+20)+'px';
   if(key!==quicklookKey)board.scrollTop=0;
   grid.style.setProperty('--cloud-columns',plan.columns);grid.style.setProperty('--cloud-rows',plan.rows);
@@ -292,7 +295,7 @@ function render(preserve=false){
     $('#'+key+'-count').textContent=fmt(visible[key].length);
     if(moduleForPage(state.page)!==key)continue;
     if(key==='loot'&&inCloud()&&visible.loot.length){renderQuicklook();continue;}
-    let message='尝试放宽分类、预算或解锁条件。',title='暂无符合条件的机会';
+    let message=inQuicklook()?'跑刀仅显示单格净值 ≥ 3万的物品，可调整类型或搜索。':'尝试放宽分类、预算或解锁条件。',title='暂无符合条件的机会';
     if(view().filter==='favorites'){title='这里还没有收藏';message='点物品右下角的星标，下次就能快速找到。';}
     if(view().filter==='short'){title=signalsLoading?'正在核对涨价机会':'暂无符合条件的涨价机会';message='尝试放宽筛选，或稍后查看新行情。';}
     $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p>${key==='loot'&&inQuicklook()?'<button data-page="items">在物品一览中查找</button>':''}<button data-reset>重置筛选</button></div>`;
@@ -303,7 +306,7 @@ function render(preserve=false){
   }
   $$('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===view().filter)));
   $('#favorite-count').textContent=state.favorites[state.market].length||'';renderFilterSummary();
-  $('#coverage').textContent=`${MARKETS[state.market]} · ${fmt(data.rawCount)} 物品 · 每5分钟刷新`;
+  $('#coverage').hidden=inQuicklook();$('#coverage').textContent=`${MARKETS[state.market]} · ${fmt(data.rawCount)} 物品 · 每5分钟刷新`;
 
   if(animateNext){const el=$('#'+moduleForPage(state.page));el.classList.add('is-entering');clearTimeout(enterTimer);enterTimer=setTimeout(()=>$$('.is-entering').forEach(e=>e.classList.remove('is-entering')),650);animateNext=false;}
 }
@@ -454,7 +457,7 @@ function detailMarkup(r){
   const i=r.item,loot=r.kind==='loot',craft=r.kind==='craft',s=signal(r);
   const materialRows=(r.recipe||[]).map(m=>`<button class="cost-material" data-open="${esc(m.item.id)}">${image(m.item.image)}<span class="cost-material-name"><strong>${esc(m.item.name)} <em>×${m.count}</em></strong><small>${m.tool?'可复用工具':`${esc(m.source)} · 单价 ₽${fmt(m.unitCost)}`}</small></span><span class="cost-material-value"><b>${m.tool?(m.capital===null?'待核价':'₽'+fmt(m.capital)):'₽'+fmt(m.cost)}</b>${m.tool?'<small>首购另计</small>':''}</span>${icon('chevron')}</button>`).join('');
   const conditions=r.execution?.missing||[],task=data.tasks?.[r.task];
-  return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}${loot&&itemRarity(i).key!=='Unknown'?`<a class="tag rarity-tag" href="${esc(SPT_SOURCE.source)}" target="_blank" rel="noreferrer" title="SPT 4.1+ 稀有度参考">SPT · ${itemRarity(i).label}</a>`:''}</div></div></div>
+  return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}</div></div></div>
   <div class="detail-actions">${detailTrail.length?'<button id="detail-back">← 返回</button>':''}<button data-favorite="${i.id}">${icon('star')}${state.favorites[state.market].includes(i.id)?'已收藏':'收藏'}</button><button id="share-item">${icon('copy')}复制链接</button></div>
   <div class="detail-metrics"><div class="detail-metric"><small>${loot?'净利 / 个':craft?'最终净利润 / 批':'预计净利润 / 次'}</small><strong class="${!loot&&r.profit<0?'negative':''}">₽${fmt(loot?r.net:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'每格净到手':craft?'每批产出净到手':'预计净回款'}</small><strong>₽${fmt(loot?r.slotValue:r.net)}</strong></div></div>
   ${loot?channelComparison(r):`<section class="purchase-detail"><div class="trade-summary"><span>${craft?'材料成本':'进货成本'} <b>₽${fmt(r.purchase)}</b></span><span>上架手续费 <b>₽${fmt(r.fee)}</b></span></div>${materialRows?`<div class="cost-materials">${materialRows}</div>`:`<div class="purchase-source">${esc(r.trader?.name||'商人')} · ${r.isBarter?'兑换':'直购'} ×${r.count}</div>`}${craft?`<div class="craft-reference"><span>制作 ${duration(r.seconds)} · 产出 ×${r.count}</span><span>参考时薪 ${sign(r.hourly)}</span></div>`:''}</section>`}
@@ -550,7 +553,7 @@ document.addEventListener('click',event=>{
   }
   if(target.dataset.quicklookSelect){const choice=target.dataset.quicklookSelect;$$('[data-quicklook-type]').forEach(el=>el.checked=choice==='all'||(choice==='default'&&DEFAULT_SCAVENGING_CATEGORIES.includes(el.dataset.quicklookType)));}
   if(target.id==='quicklook-repack'){quicklookPlan=null;animateNext=true;render(true);}
-  if(target.dataset.filter){view().filter=target.dataset.filter;animateNext=true;render();persist();}
+  if(target.dataset.filter){view().filter=target.id==='quicklook-favorites'&&view().filter==='favorites'?'all':target.dataset.filter;animateNext=true;render();persist();}
   if(target.dataset.market&&target.dataset.market!==state.market){
     clearTimeout(applyTimer);updateWindow.clear();
     state.market=target.dataset.market;sequence++;detailSequence++;data=null;detailRow=null;detailTrail=[];historyBook={};ledger=[];signalCache.clear();pendingSnapshot=null;pendingSignals=null;pendingLedger=null;itemSignalCache.clear();
@@ -567,9 +570,8 @@ $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').ad
 $('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');const label=state.paused?'恢复自动应用行情':'暂停自动应用行情';$('#pause').setAttribute('aria-label',label);$('#pause').title=label;toast(state.paused?'自动更新已暂停':'自动更新已恢复');queueApply();});
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
-$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级',`<p>单格价值 <b>40%</b> · 常见程度 <b>35%</b> · 短期涨价 <b>25%</b></p><p>常见且值钱、正在涨价的物品更靠前。单格价值超过30万后不再增加权重，低价物品的常见度加分递减。</p><p>稀有度使用 SPT 4.1+ 的公开物品库；未收录按中性权重处理，不据此隐藏物品。</p><a class="source-link" href="https://github.com/emilanderss0n/tarkynator/blob/${SPT_SOURCE.commit}/data/items.json" target="_blank" rel="noreferrer">查看 SPT 数据来源 ↗</a>`));
+$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级','<p class="priority-weights"><span>单格价值 <b>40%</b></span> · <span>常见程度 <b>35%</b></span> · <span>短期涨价 <b>25%</b></span></p>'));
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
-$('#quicklook-types-button').addEventListener('click',showFilters);
 $('#density-button').addEventListener('click',()=>{state.density=state.density==='standard'?'compact':'standard';syncControls();if(inCloud()&&data)renderQuicklook();persist();});
 $('#profile-form').addEventListener('submit',e=>{
   e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#settings'));return;}
