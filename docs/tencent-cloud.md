@@ -59,7 +59,7 @@ ssh -N -L 18787:127.0.0.1:8080 ubuntu@SERVER_IP
 
 浏览器打开 `http://127.0.0.1:18787/`。确认主页面、三个市场、物品明细与走势图正常。这个窗口关闭就停止转发，服务器继续运行。
 
-香港首月可先用公网 IP 做 HTTP 访问测试，暂不购买域名。以下只用于新建的专用实例；先确认 `/etc/nginx/sites-enabled/default` 是系统默认站点链接，再取消该链接：
+先用公网 IP 做 HTTP 连通测试。以下只用于新建的专用实例；先确认 `/etc/nginx/sites-enabled/default` 是系统默认站点链接，再取消该链接：
 
 ```sh
 ls -l /etc/nginx/sites-enabled/default
@@ -70,9 +70,33 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-在腾讯云防火墙放行网站 TCP 80；SSH 22 仅允许管理者来源地址，**不开放8787和8080**。若系统启用了 UFW，也只添加对应规则，不要直接关闭防火墙。此时访问 `http://SERVER_IP/`。HTTP 仅用于首月连通与性能测试，不提供登录、付款或个人数据上传功能。
+在腾讯云防火墙放行网站 TCP 80 / 443；SSH 22 仅允许管理者来源地址，**不开放8787和8080**。若系统启用了 UFW，也只添加对应规则，不要直接关闭防火墙。此时访问 `http://SERVER_IP/` 做连通检查，公网后台在 HTTP 下禁止登录。
 
-长期公开入口使用域名和 HTTPS：购买确认的域名，将 A 记录解析到实例 IP，开放 TCP 443，通过证书工具申请证书并配置自动续期，再用 `nginx-public.conf.example` 替换域名和证书路径。启用前运行 `nginx -t`，启用后验证 HTTPS 和自动续期。没有证书时不要直接套用 SSL 示例。香港站点不应使用要求内地备案的加速线路来替代这个步骤。
+## HTTPS 与管理端
+
+没有域名也可申请公网 IP 证书。Let's Encrypt 的 IP 证书有效期6天，Certbot 5.4+ 支持 webroot 验证，必须启用自动续期及 Nginx 重新载入钩子。[官方说明](https://letsencrypt.org/2026/03/11/shorter-certs-certbot)
+
+按 [Certbot 官方安装说明](https://certbot.eff.org/instructions?ws=other&os=snap) 安装 Snap 版本，核实版本后申请。以下 `SERVER_IP` 必须替换为已核对的公网 IP；申请命令接受证书服务条款，不登记联系邮箱：
+
+```sh
+sudo snap install --classic certbot
+/snap/bin/certbot --version
+sudo mkdir -p /var/www/tarkov-acme
+sudo /snap/bin/certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
+  --preferred-profile shortlived --webroot --webroot-path /var/www/tarkov-acme \
+  --ip-address SERVER_IP --cert-name radar-ip
+sudo install -m 0755 /opt/tarkov-radar/current/deploy/tencent/renew-hook.sh \
+  /etc/letsencrypt/renewal-hooks/deploy/radar-nginx
+```
+
+证书成功签发后，将 `nginx-ip-https.conf.example` 中的 `SERVER_IP` 替换为实际 IP，备份并替换网站配置，运行 `nginx -t` 再重新加载。验证 `https://SERVER_IP/` 证书受信任、HTTP 自动跳转以及 `/admin/` 可以登录。不可绕过证书错误。
+
+```sh
+sudo /snap/bin/certbot renew --dry-run
+systemctl list-timers --all | grep certbot
+```
+
+确认续期任务有效后，在服务器设置管理员密码，详见 [后台说明](admin.md)。管理员分类保存在数据目录中，不随新版本替换。日后有域名可改用 `nginx-public.conf.example` 和对应证书。
 
 从实际玩家的宽带和手机网络打开网站，检查首次加载、刷新、图标加载与详情图表；核验脚本也可在本机对公网地址执行。2GB配置是试用起点，承载人数以实测为准。
 
@@ -90,10 +114,11 @@ sudo systemctl reload nginx
 | 运行日志 | `sudo journalctl -u tarkov-radar -n 100 --no-pager` |
 | 重启服务 | `sudo systemctl restart tarkov-radar` |
 | 备份计划 | `systemctl list-timers tarkov-radar-backup.timer` |
-| 备份文件 | `/var/backups/tarkov-radar/ledger-*.tar.gz` |
+| 收益备份 | `/var/backups/tarkov-radar/ledger-*.tar.gz` |
+| 分类与密码摘要备份 | `/var/backups/tarkov-radar/admin-*.tar.gz` |
 | 当前版本 | `/opt/tarkov-radar/current/RELEASE.json` |
 
-每天01:15 UTC（北京时间09:15）附近备份已结束日期的收益档案，保留约14天；当日档案在次日纳入。当天实时数据仍依赖源目录。同盘备份只能应对误改，需定期把备份下载到本机；退订或销毁服务器前先保存档案。
+每天01:15 UTC（北京时间09:15）附近备份已结束日期的收益档案，以及管理员分类和密码摘要，保留约14天；当日收益档案在次日纳入。同盘备份只能应对误改，需定期把备份下载到本机；退订或销毁服务器前先保存数据。管理备份不含明文密码，但仍应私下保管。
 
 升级：上传新包，解压到新的目录，再运行安装器。它会切换版本并做存活检查，失败时回退已有旧版本；随后仍要执行完整核验。若存活正常但业务有问题，停止服务，将 `current` 链接切回 `/opt/tarkov-radar/releases/` 中核实过的旧版本，重启后再次核验。安装器保留已有 Nginx 网站配置。
 
@@ -101,4 +126,4 @@ sudo systemctl reload nginx
 
 ## 当前验证范围
 
-部署准备阶段已通过61项测试、Shell语法检查、压缩包哈希与换行校验；解压后在独立数据目录启动，三个市场各读取5,480个物品，压缩、缓存及静态文件核验通过。此验证运行在本机 Windows / Node 25，并使用768MB堆上限；不等同于2GB服务器容量压测。Ubuntu安装、systemd、Nginx、备份计时器和香港实际网络仍须在实例开通后验证。正式发布暂缓，等待产品修改完成。
+本机验证包括行情、登录鉴权、CSRF、并发编辑冲突、分类持久化和恢复、三个市场同步及缓存刷新。发布前必须继续核验实例上的 Ubuntu、systemd、Nginx、备份计时器、HTTPS续期及真实公网访问；生成部署包不代表已上线。

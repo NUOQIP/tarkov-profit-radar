@@ -5,10 +5,15 @@ import { MARKETS } from './model.mjs';
 import { localStore } from './local-store.mjs';
 import { createRadarServer } from './http-server.mjs';
 import { checkSptUpstream } from './spt-upstream.mjs';
+import { createAdminHandler } from './admin-service.mjs';
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'..');
-const store=localStore(resolve(process.env.DATA_DIR||join(root,'.cache','v2')));
+const dataDir=resolve(process.env.DATA_DIR||join(root,'.cache','v2')),store=localStore(dataDir);
 const files=new Map([
   ['/',[join(here,'index.html'),'text/html']],
+  ['/admin',[join(here,'admin.html'),'text/html']],
+  ['/admin/',[join(here,'admin.html'),'text/html']],
+  ['/admin/admin.js',[join(here,'admin.js'),'text/javascript']],
+  ['/admin/admin.css',[join(here,'admin.css'),'text/css']],
   ['/radar.js',[join(here,'app.js'),'text/javascript']],
   ['/radar.css',[join(here,'style.css'),'text/css']],
   ['/engine.js',[join(here,'model.mjs'),'text/javascript']],
@@ -20,7 +25,8 @@ const files=new Map([
   ['/fence.webp',[join(root,'public','fence.webp'),'image/webp']],
   ['/favicon.svg',[join(root,'public','favicon.svg'),'image/svg+xml']]
 ]);
-const server=createRadarServer(store,files,{trustLoopbackProxy:process.env.TRUST_PROXY==='loopback'}),port=Number(process.env.PORT||8787),host=process.env.HOST||'127.0.0.1';
+const adminHandler=createAdminHandler(store,{credentialFile:process.env.ADMIN_CREDENTIAL_FILE||join(dataDir,'admin','credentials.json'),origin:process.env.ADMIN_ORIGIN});
+const server=createRadarServer(store,files,{trustLoopbackProxy:process.env.TRUST_PROXY==='loopback',adminHandler}),port=Number(process.env.PORT||8787),host=process.env.HOST||'127.0.0.1';
 server.listen(port,host,()=>{console.log('http://'+host+':'+port);warm();checkSpt();});
 server.on('error',error=>{console.error(error.message);process.exitCode=1;});
 let harvesting=false,stopping=false;

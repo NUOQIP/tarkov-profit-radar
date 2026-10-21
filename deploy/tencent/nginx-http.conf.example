@@ -1,4 +1,4 @@
-# Temporary public-IP trial. Use HTTPS with a domain for the lasting public URL.
+# Temporary public-IP trial; admin login remains blocked until HTTPS is enabled.
 # On a fresh dedicated server, disable Ubuntu's default site before enabling this.
 server {
     listen 80 default_server;
@@ -6,10 +6,12 @@ server {
     server_tokens off;
     access_log /var/log/nginx/tarkov-radar.access.log;
     error_log /var/log/nginx/tarkov-radar.error.log;
+    client_max_body_size 8k;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/tarkov-acme; }
     location / {
         proxy_pass http://127.0.0.1:8787;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;

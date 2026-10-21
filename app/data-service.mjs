@@ -1,6 +1,7 @@
 import { MARKETS, MODEL_VERSION, EVENT_METADATA_VERSION, applyEventMetadata, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
 import { DASHBOARD_VERSION, compactSignals, makeDashboard } from './dashboard.mjs';
 import { checkSptUpstream } from './spt-upstream.mjs';
+import { classifiedDashboard } from './item-overrides.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
   set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
@@ -247,12 +248,12 @@ export async function handleApi(request,store,context={}) {
   if(!Object.hasOwn(MARKETS,market))return json({error:'未知市场'},400);
   try{
     if(url.pathname==='/api/dashboard'){
-      const ready=await dashboard(store,market,context.waitUntil),etag=`"dashboard-${market}-${ready.preparedAt}-${DASHBOARD_VERSION}"`;
+      const ready=await classifiedDashboard(store,await dashboard(store,market,context.waitUntil)),etag=`"dashboard-${market}-${ready.preparedAt}-${DASHBOARD_VERSION}-c${ready.snapshot.classificationRevision}"`;
       const headers={'ETag':etag,'Cache-Control':'public, max-age=30, stale-while-revalidate=60'};
       if(request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers});
       return json(ready,200,headers);
     }
-    if(url.pathname==='/api/snapshot')return json((await dashboard(store,market,context.waitUntil)).snapshot);
+    if(url.pathname==='/api/snapshot')return json((await classifiedDashboard(store,await dashboard(store,market,context.waitUntil))).snapshot);
     if(url.pathname==='/api/history'){
       const id=url.searchParams.get('id');if(!/^[0-9a-f]{24}$/.test(id||''))return json({error:'物品 ID 无效'},400);
       return json(await history(store,market,id));

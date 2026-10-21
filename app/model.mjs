@@ -19,7 +19,7 @@ export const EVENT_IDS = new Set([
   '67586bee39b1b82b0d0f9d06'  // Special 40-degree fuel
 ]);
 export const EVENT_METADATA_VERSION = 2;
-export const isEventItem = item => Boolean(item?.eventOnly || EVENT_IDS.has(item?.id));
+export const isEventItem = item => typeof item?.eventOnlyOverride==='boolean'?item.eventOnlyOverride:Boolean(item?.eventOnly || EVENT_IDS.has(item?.id));
 // Upgrade cached classifications without invalidating financial history or refetching prices.
 export function applyEventMetadata(data) {
   if(!data?.items || data.eventMetadataVersion===EVENT_METADATA_VERSION)return data;

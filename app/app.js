@@ -373,7 +373,7 @@ async function refresh(force=false){
     if(!data){loadingPhase(1,'正在核对价格与收益');await nextPaint();if(seq!==sequence)return;}
     const snapshot=applyEventMetadata(result.snapshot);
     warning(snapshot.warning||snapshot.collectionWarning||(Date.now()-Date.parse(snapshot.fetchedAt)>15*60000?'行情更新中，当前显示上次成功快照。':''));
-    if(!data||force||snapshot.fetchedAt!==data.fetchedAt||result.signals.checkedAt!==signalsInfo.checkedAt){
+    if(!data||force||snapshot.fetchedAt!==data.fetchedAt||snapshot.classificationRevision!==data.classificationRevision||result.signals.checkedAt!==signalsInfo.checkedAt){
       pendingSnapshot=snapshot;pendingSignals=result.signals;pendingLedger=result.ledger||[];
       if(data&&!force)queueApply();
       else{

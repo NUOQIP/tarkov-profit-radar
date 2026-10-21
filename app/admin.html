@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>管理端 · 塔科夫赚钱监控</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/"><img src="/fence.webp" alt=""><span>塔科夫赚钱监控<small>CONTROL ROOM / 管理端</small></span></a><div class="header-actions"><a href="/">返回看板 ↗</a><button id="logout" hidden>退出登录</button></div></header>
+  <main>
+    <section id="login" class="login-panel" aria-labelledby="login-title">
+      <span class="eyebrow">AUTHORIZED PERSONNEL</span><h1 id="login-title">进入控制室</h1><p id="login-note">正在检查管理入口…</p>
+      <form id="login-form" hidden><label for="password">管理员密码</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required maxlength="128"><button class="primary" type="submit">登录 →</button></div></form>
+      <p id="login-error" class="error" role="alert"></p><div class="login-decoration" aria-hidden="true">01 / OPERATOR ACCESS</div>
+    </section>
+    <section id="workspace" hidden>
+      <div class="page-heading"><div><span class="eyebrow">ITEM CLASSIFICATION</span><h1>物品管理</h1></div><span class="scope">分类修改同步所有市场</span></div>
+      <div id="overview" class="overview" aria-label="服务状态"></div>
+      <div class="catalog">
+        <form id="filters" class="toolbar" role="search"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索物品名称或 ID" aria-label="搜索物品名称或 ID" maxlength="160"></label><label><span class="sr-only">报价市场</span><select id="market"><option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="pvp-season">PVP 赛季</option></select></label><label><span class="sr-only">活动分类</span><select id="event-filter"><option value="">全部物品</option><option value="true">活动物品</option><option value="false">非活动物品</option></select></label><label class="modified-filter"><input id="modified" type="checkbox">仅看已修改</label><button id="reload" type="button" aria-label="刷新物品">刷新</button></form>
+        <div class="catalog-heading"><span id="total">载入物品…</span><span>选择物品编辑</span></div>
+        <div id="table-wrap" class="table-wrap" aria-busy="false"><table><thead><tr><th>物品</th><th>类型</th><th>活动分类</th><th>稀有度</th><th><span class="sr-only">编辑</span></th></tr></thead><tbody id="items"></tbody></table><p id="empty" class="empty" hidden>没有找到物品，试试其他名称或筛选。</p></div>
+        <div class="pagination"><button id="previous" type="button">← 上一页</button><span id="page-label"></span><button id="next" type="button">下一页 →</button></div>
+      </div>
+      <details class="maintenance"><summary>维护信息 <span>上游状态 / 最近修改</span></summary><div id="maintenance-content"></div></details>
+    </section>
+  </main>
+  <dialog id="editor" aria-labelledby="editor-title"><form id="edit-form"><div class="drawer-head"><span class="eyebrow">EDIT CLASSIFICATION</span><button id="close-editor" type="button" aria-label="关闭编辑">✕</button></div><div id="item-heading"></div><div class="editor-fields"><label for="edit-event">活动分类</label><select id="edit-event"><option value="source">跟随原始分类</option><option value="true">活动物品</option><option value="false">非活动物品</option></select><small id="event-source"></small><label for="edit-rarity">稀有度</label><select id="edit-rarity"><option value="source">跟随原始分类</option><option value="Common">常见</option><option value="Rare">稀有</option><option value="Superrare">超稀有</option><option value="Unknown">未收录</option></select><small id="rarity-source"></small></div><p class="editor-hint">活动分类影响活动物品开关；稀有度影响跑刀排序。</p><p id="edit-error" class="error" role="alert"></p><div class="drawer-actions"><button id="restore" type="button">恢复原始分类</button><button id="save" class="primary" type="submit">保存修改</button></div></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body></html>

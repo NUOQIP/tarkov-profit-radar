@@ -1,5 +1,5 @@
 [Unit]
-Description=Back up completed Tarkov Radar profit-history days
+Description=Back up Tarkov Radar history and administrator classifications
 
 [Service]
 Type=oneshot

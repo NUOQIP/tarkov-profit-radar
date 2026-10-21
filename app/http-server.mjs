@@ -13,7 +13,11 @@ export function clientAddress(request,trustLoopbackProxy=false) {
   return trustLoopbackProxy&&loopback&&typeof forwarded==='string'&&isIP(forwarded)?forwarded:peer;
 }
 
-export function createRadarServer(store,files,{trustLoopbackProxy=false}={}) {
+export function secureRequest(request,trustLoopbackProxy=false) {
+  return Boolean(request.socket.encrypted||(trustLoopbackProxy&&['127.0.0.1','::1','::ffff:127.0.0.1'].includes(request.socket.remoteAddress)&&request.headers['x-forwarded-proto']==='https'));
+}
+
+export function createRadarServer(store,files,{trustLoopbackProxy=false,adminHandler}={}) {
   const assets=new Map(),compressed=new Map(),clients=new Map();
   const server=createServer(async(req,res)=>{
     try{
@@ -23,7 +27,11 @@ export function createRadarServer(store,files,{trustLoopbackProxy=false}={}) {
       else if(++rate.count>300){res.writeHead(429,{'Retry-After':'60'});return res.end('Too many requests');}
       if(clients.size>2000)for(const [key,entry] of clients)if(now-entry.at>60000||clients.size>2000)clients.delete(key);
       let body,status=200,headers;
-      if(files.has(url.pathname)&&['GET','HEAD'].includes(req.method)){
+      const adminResponse=adminHandler&&await adminHandler(req,url,{ip,secure:secureRequest(req,trustLoopbackProxy)});
+      if(adminResponse){
+        status=adminResponse.status;headers=Object.fromEntries(adminResponse.headers);body=Buffer.from(await adminResponse.arrayBuffer());
+        req.resume();
+      }else if(files.has(url.pathname)&&['GET','HEAD'].includes(req.method)){
         const [path,type]=files.get(url.pathname),info=await stat(path);let asset=assets.get(path);
         if(!asset||asset.modified!==info.mtimeMs){body=await readFile(path);asset={body,modified:info.mtimeMs,etag:'"'+createHash('sha256').update(body).digest('hex').slice(0,24)+'"'};assets.set(path,asset);}
         headers={'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','ETag':asset.etag};body=asset.body;
@@ -33,6 +41,11 @@ export function createRadarServer(store,files,{trustLoopbackProxy=false}={}) {
         status=response.status;headers=Object.fromEntries(response.headers);body=Buffer.from(await response.arrayBuffer());
       }
       headers['X-Content-Type-Options']='nosniff';headers['Referrer-Policy']='strict-origin-when-cross-origin';
+      if(url.pathname==='/admin'||url.pathname.startsWith('/admin/')){
+        headers['Cache-Control']='no-store';headers['X-Frame-Options']='DENY';
+        headers['Content-Security-Policy']="default-src 'self'; img-src 'self' https:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+        headers['Referrer-Policy']='no-referrer';headers['X-Robots-Tag']='noindex, nofollow';
+      }
       headers['Vary']='Accept-Encoding';
       if(body?.length>1024&&/\bgzip\b/.test(req.headers['accept-encoding']||'')&&status===200){
         const tag=headers.ETag||headers.etag,key=tag&&url.pathname+tag;

@@ -7,6 +7,7 @@ export const RUN_VALUE_CAP=1000000;
 export const RUN_MIN_VALUE=30000;
 export const qualifiesForRun=row=>Number.isFinite(row.slotValue)&&row.slotValue>=RUN_MIN_VALUE;
 export function itemRarity(item={}){
+  if(Object.hasOwn(grades,item.rarityOverride))return grades[item.rarityOverride];
   // Preset objects use the underlying weapon template's rarity.
   const key=rarityById.get(item.baseItem)||rarityById.get(item.id)||rarityById.get(item.valuationId)||'Unknown';
   return grades[key];

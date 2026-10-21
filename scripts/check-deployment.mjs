@@ -11,6 +11,11 @@ function ensure(condition,message){if(!condition)throw new Error(message);}
 const health=await get('/api/health');
 ensure(health.response.ok&&JSON.parse(health.body).service==='tarkov-profit-radar','Health check failed');
 for(const path of ['/api/spt-status','/api/spt-check'])ensure((await get(path)).response.status===404,'SPT management must not be public');
+const admin=await get('/admin/');
+ensure(admin.response.ok&&admin.body.includes('管理端'),'Admin page missing');
+ensure(admin.response.headers.get('cache-control')==='no-store'&&admin.response.headers.get('x-frame-options')==='DENY','Admin security headers missing');
+for(const path of ['/admin/api/items','/admin/api/overview'])ensure([401,403,503].includes((await get(path)).response.status),'Admin data exposed without authentication');
+for(const path of ['/admin/credentials.json','/admin/item-overrides.json'])ensure((await get(path)).response.status===404,'Admin storage exposed');
 const rows=[];
 for(const market of ['pve','regular','pvp-season']){
   const first=await get('/api/dashboard?market='+market,{'Accept-Encoding':'gzip'});
@@ -31,7 +36,7 @@ for(const market of ['pve','regular','pvp-season']){
     ageMinutes:Math.round(ageMinutes*10)/10,loadMs:first.ms,cacheMs:cached.ms,
     compressedBytes:Number(first.response.headers.get('content-length'))||null});
 }
-for(const path of ['/','/radar.js','/radar.css','/engine.js','/quicklook.js','/update-window.js','/navigation.mjs','/loot-priority.mjs','/spt-rarity.mjs','/fence.webp','/favicon.svg']){
+for(const path of ['/','/radar.js','/radar.css','/engine.js','/quicklook.js','/update-window.js','/navigation.mjs','/loot-priority.mjs','/spt-rarity.mjs','/fence.webp','/favicon.svg','/admin/admin.js','/admin/admin.css']){
   const asset=await get(path);ensure(asset.response.ok&&asset.body.length>0,`Asset missing: ${path}`);
 }
 ensure((await get('/api/feed')).response.status===404,'QQ endpoint should remain unavailable');

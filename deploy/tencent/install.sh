@@ -38,6 +38,7 @@ fi
 "$base/node/bin/node" -e 'if(Number(process.versions.node.split(".")[0])<24)process.exit(1)'
 getent passwd tarkov-radar >/dev/null || useradd --system --home-dir /var/lib/tarkov-radar --shell /usr/sbin/nologin tarkov-radar
 install -d -o tarkov-radar -g tarkov-radar -m 0750 /var/lib/tarkov-radar /var/lib/tarkov-radar/ledger
+install -d -o tarkov-radar -g tarkov-radar -m 0700 /var/lib/tarkov-radar/admin
 install -d -m 0700 /var/backups/tarkov-radar
 release="$base/releases/$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 0755 "$release"

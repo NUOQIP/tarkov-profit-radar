@@ -8,12 +8,15 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(process.argv[2]||join(root,'outputs','tarkov-radar-tencent.tar.gz'));
 const files=[
   'app/server.mjs','app/http-server.mjs','app/local-store.mjs','app/data-service.mjs',
+  'app/admin-auth.mjs','app/admin-service.mjs','app/item-overrides.mjs',
+  'app/admin.html','app/admin.js','app/admin.css','scripts/admin-password.mjs',
   'app/dashboard.mjs','app/model.mjs','app/index.html','app/app.js','app/style.css',
   'app/quicklook.mjs','app/update-window.mjs','public/favicon.svg','public/fence.webp',
   'app/navigation.mjs','app/loot-priority.mjs','app/spt-rarity.mjs','app/spt-upstream.mjs','docs/spt-rarity.md',
-  'scripts/check-deployment.mjs','README.md','docs/tencent-cloud.md',
+  'scripts/check-deployment.mjs','README.md','docs/tencent-cloud.md','docs/admin.md',
   'deploy/tencent/install.sh','deploy/tencent/radar.service',
   'deploy/tencent/nginx-private.conf','deploy/tencent/nginx-public.conf.example','deploy/tencent/nginx-http.conf.example',
+  'deploy/tencent/nginx-ip-https.conf.example','deploy/tencent/renew-hook.sh',
   'deploy/tencent/backup.sh','deploy/tencent/backup.service','deploy/tencent/backup.timer',
 ];
 const digest=value=>createHash('sha256').update(value).digest('hex');
