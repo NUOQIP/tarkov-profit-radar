@@ -1,8 +1,9 @@
-import { MODEL_VERSION, summarizeHistory, mergeRecentQuotes } from './model.mjs';
+import { MODEL_VERSION, summarizeHistory, mergeRecentQuotes, applyEventMetadata } from './model.mjs';
 
 export const DASHBOARD_VERSION = 2;
 // Keep all source items; omit fields and lower trader bids the UI never uses.
 export function compactSnapshot(data) {
+  data=applyEventMetadata(data);
   const items=Object.fromEntries(Object.entries(data.items).map(([id,item])=>{
     const {url,wiki,sourceCategories,sell,buy,...rest}=item;
     const best=(sell||[]).filter(x=>Number.isFinite(x.priceRUB)&&x.priceRUB>0).reduce((a,b)=>!a||b.priceRUB>a.priceRUB?b:a,null);

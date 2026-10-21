@@ -9,7 +9,8 @@ const output=resolve(process.argv[2]||join(root,'outputs','tarkov-radar-tencent.
 const files=[
   'app/server.mjs','app/http-server.mjs','app/local-store.mjs','app/data-service.mjs',
   'app/dashboard.mjs','app/model.mjs','app/index.html','app/app.js','app/style.css',
-  'app/quicklook.mjs','app/update-window.mjs','public/favicon.svg',
+  'app/quicklook.mjs','app/update-window.mjs','public/favicon.svg','public/fence.webp',
+  'app/navigation.mjs','app/loot-priority.mjs','app/spt-rarity.mjs','docs/spt-rarity.md',
   'scripts/check-deployment.mjs','README.md','docs/tencent-cloud.md',
   'deploy/tencent/install.sh','deploy/tencent/radar.service',
   'deploy/tencent/nginx-private.conf','deploy/tencent/nginx-public.conf.example','deploy/tencent/nginx-http.conf.example',
@@ -22,7 +23,8 @@ const staging=await mkdtemp(join(root,'work','tencent-release-'));
 const checksums={};
 // Explicit allowlist: no credentials, caches, Git metadata or build dependencies.
 for(const file of files){
-  const content=(await readFile(join(root,file),'utf8')).replace(/\r\n/g,'\n');
+  const raw=await readFile(join(root,file));
+  const content=file.endsWith('.webp')?raw:raw.toString('utf8').replace(/\r\n/g,'\n');
   await mkdir(dirname(join(staging,file)),{recursive:true});
   await writeFile(join(staging,file),content);
   checksums[file]=digest(content);

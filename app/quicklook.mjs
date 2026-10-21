@@ -1,66 +1,50 @@
-// A bounded packing layout: new quotes keep surviving items in their seats.
-export function quicklookLayout(items, {width, height, compact = false, spotlight = true, showAll = false, previous = null} = {}) {
-  const columns = Math.max(1, Math.min(spotlight?12:20, Math.floor(((width || 640) + 8) / (spotlight?(compact?128:146):(compact?92:104)))));
-  let rows = Math.max(1, Math.min(spotlight?6:10, Math.floor(((height || 420) + 8) / (spotlight?(compact?122:136):(compact?96:112)))));
-  const ranked = [...new Map(items.filter(r => Number.isFinite(r.slotValue) && r.slotValue > 0).map(r => [r.id,r])).values()]
-    .sort((a,b) => b.slotValue-a.slotValue || a.id.localeCompare(b.id));
-  if(showAll&&!spotlight)rows=Math.max(rows,Math.ceil(ranked.length/columns));
-  const capacity = columns * rows;
-  const largeCount = spotlight && columns >= 6 && rows >= 3 ? 1 : 0;
-  const mediumCount = spotlight && columns >= 4 ? Math.min(3, Math.floor(capacity / 8)) : 0;
-  function pack(retained = [], candidates = ranked) {
-    const occupied = new Set(), cells = [];
-    const fits = (x,y,w,h) => x>=0 && y>=0 && x+w<=columns && y+h<=rows &&
-      Array.from({length:w*h},(_,n) => (y+Math.floor(n/w))*columns+x+n%w).every(n => !occupied.has(n));
-    function place(cell) {
-      cells.push(cell);
+// Dense cells with larger highlights. All matching items remain scrollable.
+export function quicklookLayout(items,{width=640,height=420,compact=false,spotlight=true,showAll=false,previous=null}={}){
+  const columns=Math.max(1,Math.min(20,Math.floor((width+7)/(compact?98:110))));
+  const viewportRows=Math.max(1,Math.floor((height+7)/(compact?119:131)));
+  const ranked=[...new Map(items.filter(r=>Number.isFinite(r.slotValue)&&r.slotValue>0).map(r=>[r.id,r])).values()]
+    .sort((a,b)=>(b.quicklookScore??b.slotValue)-(a.quicklookScore??a.slotValue)||b.slotValue-a.slotValue||a.id.localeCompare(b.id));
+  const shape=rank=>{
+    if(!spotlight||columns<3)return {w:1,h:1,tier:'small'};
+    if(columns>=5&&(rank===0||(columns>=9&&rank===3)))return {w:2,h:2,tier:'large'};
+    if([0,1,2,5,8].includes(rank))return {w:2,h:1,tier:'medium'};
+    return {w:1,h:1,tier:'small'};
+  };
+  const area=ranked.reduce((sum,_,rank)=>{const s=shape(rank);return sum+s.w*s.h;},0);
+  const capacityRows=showAll?Math.max(viewportRows,Math.ceil(area/columns)+2):viewportRows;
+  function pack(retained=[]){
+    const occupied=new Set(),cells=[],placed=new Set();
+    const fits=(x,y,w,h)=>x+w<=columns&&y+h<=capacityRows&&Array.from({length:w*h},(_,n)=>(y+Math.floor(n/w))*columns+x+n%w).every(k=>!occupied.has(k));
+    function place(cell){
+      cells.push(cell);placed.add(cell.id);
       for(let y=cell.y;y<cell.y+cell.h;y++)for(let x=cell.x;x<cell.x+cell.w;x++)occupied.add(y*columns+x);
     }
     for(const c of retained)if(fits(c.x,c.y,c.w,c.h))place({...c});
-    const placed = new Set(cells.map(c => c.id));
     let cursor=0;
-    for(let rank=0;rank<candidates.length && occupied.size<capacity;rank++) {
-      const item=candidates[rank];if(placed.has(item.id))continue;
-      if(!spotlight){
-        while(occupied.has(cursor))cursor++;
-        place({id:item.id,x:cursor%columns,y:Math.floor(cursor/columns),w:1,h:1,tier:'small'});
-        cursor++;continue;
-      }
-      const tier=rank<largeCount?'large':rank<largeCount+mediumCount?'medium':'small';
-      const w=tier==='small'?1:2,h=tier==='large'?2:1;
-      const positions=[];
-      if(tier==='large')positions.push([Math.floor((columns-w)/2),Math.floor((rows-h)/2)]);
-      for(let y=0;y<rows;y++)for(let x=0;x<columns;x++)positions.push([x,y]);
-      const spot=positions.find(([x,y])=>fits(x,y,w,h));
-      const fallback=spot||positions.find(([x,y])=>fits(x,y,1,1));
-      if(fallback)place({id:item.id,x:fallback[0],y:fallback[1],w:spot?w:1,h:spot?h:1,tier:spot?tier:'small'});
+    for(let rank=0;rank<ranked.length;rank++){
+      const item=ranked[rank];if(placed.has(item.id))continue;
+      const desired=shape(rank);
+      while(occupied.has(cursor))cursor++;
+      if(cursor>=columns*capacityRows)break;
+      let position=-1;
+      for(let n=cursor;n<columns*capacityRows;n++)if(fits(n%columns,Math.floor(n/columns),desired.w,desired.h)){position=n;break;}
+      const size=position>=0?desired:{w:1,h:1,tier:'small'};
+      if(position<0)position=cursor;
+      place({id:item.id,x:position%columns,y:Math.floor(position/columns),...size});
     }
+    const order=new Map(ranked.map((r,i)=>[r.id,i]));cells.sort((a,b)=>order.get(a.id)-order.get(b.id));
     return cells;
   }
-  const fresh=pack();
-  if(previous?.columns!==columns || previous?.rows!==rows)return {columns,rows,cells:fresh};
-  const selected=new Map(fresh.map(c=>[c.id,c]));
-  const retained=previous.cells.filter(c=>selected.get(c.id)?.tier===c.tier);
-  const cells=pack(retained,ranked.filter(r=>selected.has(r.id)));
+  let cells=pack();
+  const selected=new Map(cells.map(c=>[c.id,c]));
+  // Keep unchanged tiers still during quote ticks, while promoting new highlights.
+  if(previous?.columns===columns&&previous.cells.length===cells.length){
+    cells=pack(previous.cells.filter(c=>selected.get(c.id)?.tier===c.tier&&c.y+c.h<=capacityRows));
+  }
+  const rows=showAll?Math.max(1,...cells.map(c=>c.y+c.h)):viewportRows;
   return {columns,rows,cells};
 }
-
-export const QUICKLOOK_VALUE_STEPS = [0,10000,20000,30000,50000,80000,100000,150000,200000,300000,500000,1000000,null];
-export const DEFAULT_QUICKLOOK_RANGE = [4,12];
-export const EVERYDAY_QUICKLOOK_RANGE = [3,6];
-export function normalizeQuicklookRange(range) {
-  const last=QUICKLOOK_VALUE_STEPS.length-1;
-  if(!Array.isArray(range)||range.length!==2||!range.every(Number.isInteger))return [...DEFAULT_QUICKLOOK_RANGE];
-  const low=Math.max(0,Math.min(last-1,range[0]));
-  return [low,Math.max(low,Math.min(last,range[1]))];
-}
-export function quicklookRangeMatches(value,range) {
-  const [low,high]=normalizeQuicklookRange(range);
-  return Number.isFinite(value)&&value>0&&value>=QUICKLOOK_VALUE_STEPS[low]&&
-    (QUICKLOOK_VALUE_STEPS[high]===null||value<=QUICKLOOK_VALUE_STEPS[high]);
-}
-
-export function opportunityTone(row, signal = {}) {
-  if(row.kind!=='loot' && Number.isFinite(row.profit) && row.profit<0)return 'loss';
+export function opportunityTone(row,signal={}){
+  if(row.kind!=='loot'&&Number.isFinite(row.profit)&&row.profit<0)return 'loss';
   return signal.short?'short':signal.long?'long':'';
 }

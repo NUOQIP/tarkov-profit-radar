@@ -1,4 +1,4 @@
-import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
+import { MARKETS, MODEL_VERSION, EVENT_METADATA_VERSION, applyEventMetadata, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
 import { DASHBOARD_VERSION, compactSignals, makeDashboard } from './dashboard.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
@@ -48,7 +48,7 @@ async function cachedSource(store,market,name,maxAge) {
 export async function snapshot(store,market) {
   const key=`snapshot/${market}.json`,memoryKey=keyFor(store,key);
   return once(store,memoryKey,async()=>{
-    const prior=cache.get(memoryKey)||await store.read(key);
+    const prior=applyEventMetadata(cache.get(memoryKey)||await store.read(key));
     if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&prior.imageVersion===1&&prior.categoryMetadataVersion===1&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
     try{
       const parts={},names=['items','items_zh','items_en','traders','hideout','barters','crafts','tasks','tasks_zh'];
@@ -186,7 +186,7 @@ export async function digest(store,market,origin) {
   return {version:1,market,generatedAt:data.fetchedAt,source:data.source,delivery:'read-only; no QQ messages sent',items,
     text:[`塔科夫赚钱监控 · ${MARKETS[market]}`,...items.slice(0,5).map(i=>`${i.name} · 预计${i.basis==='before-fuel'?'扣燃料前':''}收益 ₽${i.profit.toLocaleString('zh-CN')}`),`${origin}/?market=${market}`].join('\n')};
 }
-const validDashboard=value=>value?.version===DASHBOARD_VERSION&&value.modelVersion===MODEL_VERSION;
+const validDashboard=value=>value?.version===DASHBOARD_VERSION&&value.modelVersion===MODEL_VERSION&&value.snapshot?.eventMetadataVersion===EVENT_METADATA_VERSION;
 async function saveDashboard(store,data,book) {
   const result=makeDashboard(data,book,await profitHistory(store,data.market));
   await store.write(`dashboard/${data.market}.json`,result);
@@ -224,7 +224,7 @@ export async function dashboard(store,market,waitUntil) {
     if(!validDashboard(ready)){
       // Upgrade existing caches without making the visitor wait for new histories.
       const cached=await store.read(`snapshot/${market}.json`);
-      const data=cached?.version===2&&cached.modelVersion===MODEL_VERSION?cached:await snapshot(store,market);
+      const data=cached?.version===2&&cached.modelVersion===MODEL_VERSION?applyEventMetadata(cached):await snapshot(store,market);
       ready=await saveDashboard(store,data,await store.read(`signals/${market}.json`));
     }
     cache.set(memoryKey,ready);

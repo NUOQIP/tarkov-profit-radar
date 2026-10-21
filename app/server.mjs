@@ -13,6 +13,10 @@ const files=new Map([
   ['/engine.js',[join(here,'model.mjs'),'text/javascript']],
   ['/update-window.js',[join(here,'update-window.mjs'),'text/javascript']],
   ['/quicklook.js',[join(here,'quicklook.mjs'),'text/javascript']],
+  ['/navigation.mjs',[join(here,'navigation.mjs'),'text/javascript']],
+  ['/loot-priority.mjs',[join(here,'loot-priority.mjs'),'text/javascript']],
+  ['/spt-rarity.mjs',[join(here,'spt-rarity.mjs'),'text/javascript']],
+  ['/fence.webp',[join(root,'public','fence.webp'),'image/webp']],
   ['/favicon.svg',[join(root,'public','favicon.svg'),'image/svg+xml']]
 ]);
 const server=createRadarServer(store,files,{trustLoopbackProxy:process.env.TRUST_PROXY==='loopback'}),port=Number(process.env.PORT||8787),host=process.env.HOST||'127.0.0.1';

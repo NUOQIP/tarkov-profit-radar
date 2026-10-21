@@ -30,7 +30,7 @@ for(const market of ['pve','regular','pvp-season']){
     ageMinutes:Math.round(ageMinutes*10)/10,loadMs:first.ms,cacheMs:cached.ms,
     compressedBytes:Number(first.response.headers.get('content-length'))||null});
 }
-for(const path of ['/','/radar.js','/radar.css','/engine.js','/quicklook.js','/update-window.js','/favicon.svg']){
+for(const path of ['/','/radar.js','/radar.css','/engine.js','/quicklook.js','/update-window.js','/navigation.mjs','/loot-priority.mjs','/spt-rarity.mjs','/fence.webp','/favicon.svg']){
   const asset=await get(path);ensure(asset.response.ok&&asset.body.length>0,`Asset missing: ${path}`);
 }
 ensure((await get('/api/feed')).response.status===404,'QQ endpoint should remain unavailable');

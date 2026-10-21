@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, isPriceOpportunity, summarizeHistory, analyzeHistorySummary, mergeRecentQuotes, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
+import { applyEventMetadata, EVENT_METADATA_VERSION, fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, isPriceOpportunity, summarizeHistory, analyzeHistorySummary, mergeRecentQuotes, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -481,4 +481,25 @@ test('small per-round increases remain useful to batch sellers without inventing
   const s=analyzeHistory(points,i,data,{},now);
   assert.equal(s.short,true);assert.ok(s.extraNet>0&&s.extraNet<1000);
   assert.equal(s.extraNet,1500-fleaFee(1000,1500,flea)-900);
+});
+
+
+test('holiday foods and special fuel survive the database but obey the event switch across routes',()=>{
+  const ids=['6937ed118715e9fd1b0f286d','67586b7e49c2fa592e0d8ed9','67586bee39b1b82b0d0f9d06'];
+  const raw=dataset([...ids.map(id=>item(id,{price:10000,average:10000,basePrice:10000,eventOnly:false,excluded:false,buy:[{trader:'t',priceRUB:1000,currency:'RUB',minTraderLevel:1}]})),item('normal')],{
+    barters:ids.map((id,n)=>({id:'b'+n,trader:'t',minTraderLevel:1,offeredItem:{item:'normal',count:1},requiredItems:[{item:id,count:1}]})),
+    crafts:ids.map((id,n)=>({id:'c'+n,station:'s',level:1,duration:3600,productItem:{item:'normal',count:1},requiredItems:[{item:id,count:1}]}))
+  });
+  const data=applyEventMetadata(raw);
+  assert.equal(data.eventMetadataVersion,EVENT_METADATA_VERSION);assert.equal(Object.keys(data.items).length,4);
+  assert.ok(ids.every(id=>data.items[id].eventOnly&&!raw.items[id].eventOnly));
+  assert.deepEqual(collectLoot(data,{},now).map(r=>r.id),['normal']);
+  assert.equal(collectLoot(data,{includeEvents:true},now).length,4);
+  assert.equal(collectCatalog(data,{},now).length,4);
+  assert.equal(collectFlips(data,{includeUnavailable:true,includeLosses:true},now).length,0);
+  assert.equal(collectCrafts(data,{includeLosses:true},now).length,0);
+  assert.equal(collectFlips(data,{includeEvents:true,includeLosses:true},now).length,6);
+  assert.equal(collectCrafts(data,{includeEvents:true,includeLosses:true},now).length,3);
+  assert.ok(collectFlips(data,{includeEvents:true,includeLosses:true},now).every(r=>r.eventOnly));
+  assert.ok(collectCrafts(data,{includeEvents:true,includeLosses:true},now).every(r=>r.eventOnly));
 });

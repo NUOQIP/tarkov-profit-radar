@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {quicklookLayout,opportunityTone,normalizeQuicklookRange,quicklookRangeMatches,EVERYDAY_QUICKLOOK_RANGE} from './quicklook.mjs';
+import {quicklookLayout,opportunityTone} from './quicklook.mjs';
 const items=Array.from({length:100},(_,i)=>({id:String(i).padStart(3,'0'),slotValue:100000-i*800}));
 function valid(plan) {
   const cells=new Set(),ids=new Set();
@@ -16,7 +16,7 @@ test('quicklook stays within narrow, short, desktop and wide screens without ove
   for(const width of [280,360,650,1150,1900,3000])for(const height of [170,350,550,1000])for(const compact of [false,true]) {
     const plan=quicklookLayout(items,{width,height,compact});valid(plan);
     assert.ok(plan.cells.length>0);assert.ok(plan.cells.some(c=>c.id==='000'));
-    assert.equal(plan.cells.reduce((n,c)=>n+c.w*c.h,0),plan.columns*plan.rows);
+    assert.ok(plan.cells.reduce((n,c)=>n+c.w*c.h,0)<=plan.columns*plan.rows);
   }
 });
 test('price updates keep unchanged tiers in place and promote newly valuable items',()=>{
@@ -36,15 +36,6 @@ test('price updates keep unchanged tiers in place and promote newly valuable ite
 test('cloud excludes unknown and nonpositive values and handles empty results',()=>{
   assert.deepEqual(quicklookLayout([{id:'missing',slotValue:null},{id:'zero',slotValue:0},{id:'bad',slotValue:NaN}]).cells,[]);
 });
-test('stepped range defaults to 50k with no ceiling and includes both preset boundaries',()=>{
-  const values=[null,NaN,0,29999,30000,49999,50000,99999,100000,100001,5000000];
-  assert.deepEqual(values.filter(v=>quicklookRangeMatches(v)),[50000,99999,100000,100001,5000000]);
-  assert.deepEqual(values.filter(v=>quicklookRangeMatches(v,EVERYDAY_QUICKLOOK_RANGE)),[30000,49999,50000,99999,100000]);
-  assert.deepEqual(normalizeQuicklookRange(null),[4,12]);
-  assert.deepEqual(normalizeQuicklookRange([9,3]),[9,9]);
-  assert.deepEqual(normalizeQuicklookRange([-1,100]),[0,12]);
-  assert.deepEqual(normalizeQuicklookRange([12,12]),[11,12]);
-});
 test('unified cloud fills available space with compact single-cell tiles',()=>{
   for(const width of [100,230,330,800,1250,1900])for(const height of [100,300,600,1000])for(const compact of [false,true]){
     const plan=quicklookLayout(items,{width,height,compact,spotlight:false});valid(plan);
@@ -63,4 +54,20 @@ test('loss color wins over any stale signal; profitable long and short use disti
   assert.equal(opportunityTone({kind:'craft',profit:1},{long:true}),'long');
   assert.equal(opportunityTone({kind:'loot'},{short:true,long:true}),'short');
   assert.equal(opportunityTone({kind:'flip',profit:null},{}),'');
+});
+
+
+test('variable cloud keeps every match, follows priority and packs without collisions at all widths',()=>{
+  const ranked=items.map((r,i)=>({...r,quicklookScore:100-i*.5}));
+  ranked[90].quicklookScore=110;
+  for(const width of [100,280,360,650,1150,1900,3000])for(const height of [170,350,550,1000])for(const compact of [false,true]){
+    const size={width,height,compact,showAll:true},plan=quicklookLayout(ranked,size);valid(plan);
+    assert.equal(plan.cells.length,items.length);assert.equal(plan.cells[0].id,'090');
+    if(plan.columns>=5)assert.ok(plan.cells.some(c=>c.tier==='large'));
+    const next=quicklookLayout(ranked.map(r=>({...r,slotValue:r.slotValue+1})),{...size,previous:plan});
+    valid(next);assert.deepEqual(next.cells,plan.cells);
+    const changed=ranked.filter(r=>r.id!=='050');changed.push({id:'new',slotValue:10000,quicklookScore:120});
+    const refresh=quicklookLayout(changed,{...size,previous:plan});valid(refresh);
+    assert.equal(refresh.cells.length,changed.length);assert.equal(refresh.cells[0].id,'new');
+  }
 });

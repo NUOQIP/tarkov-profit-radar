@@ -1,12 +1,13 @@
-import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
+import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
-import { quicklookLayout,opportunityTone,QUICKLOOK_VALUE_STEPS,DEFAULT_QUICKLOOK_RANGE,normalizeQuicklookRange,quicklookRangeMatches } from '/quicklook.js';
+import { quicklookLayout,opportunityTone } from '/quicklook.js';
+import { PAGES,moduleForPage,resolvePage,migrateWorkspaceViews } from '/navigation.mjs';
+import { itemRarity,lootPriority,compareLootPriority,SPT_SOURCE } from '/loot-priority.mjs';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
-const QUICKLOOK_PRESETS={keys:{types:['keys'],range:DEFAULT_QUICKLOOK_RANGE},mods:{types:['mods'],range:DEFAULT_QUICKLOOK_RANGE}};
-const matchesQuicklookPreset=(v,p)=>v.quicklookRange.every((n,i)=>n===p.range[i])&&v.quicklookTypes.length===p.types.length&&p.types.every(k=>v.quicklookTypes.includes(k));
-const UI_REVISION=6;
-const PAGES=['loot','flips','crafts','items'],MODULES={loot:'捡什么 · 卖什么',flips:'商人倒货',crafts:'藏身处制作'};
+const QUICKLOOK_PRESETS={keys:{types:['keys']},mods:{types:['mods']}};
+const matchesQuicklookPreset=(v,p)=>v.quicklookTypes.length===p.types.length&&p.types.every(k=>v.quicklookTypes.includes(k));
+const UI_REVISION=7;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>Number.isFinite(v)?(Math.sign(v)*Math.round(Math.abs(v))).toLocaleString('zh-CN'):'—';
 const sign=v=>Number.isFinite(v)?(v>=0?'+':'−')+fmt(Math.abs(v)):'—';
@@ -53,34 +54,26 @@ function safeView(v={}){
   return {category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',filter:['short','favorites'].includes(v.filter)?v.filter:'all',
     search:typeof v.search==='string'?v.search.slice(0,200):'',
     includeEvents:v.includeEvents===true,
-    lootScope:v.lootScope==='scavenging'?'scavenging':'all',quicklookView:v.quicklookView==='list'?'list':'cloud',station:typeof v.station==='string'?v.station:'all',
-    quicklookTypes,quicklookTypesRevision:1,quicklookRange:normalizeQuicklookRange(v.quicklookRange),
+    quicklookView:v.quicklookView==='list'?'list':'cloud',station:typeof v.station==='string'?v.station:'all',
+    quicklookTypes,quicklookTypesRevision:1,
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
-}
-function safeCatalogView(v={}){
-  if(!v||typeof v!=='object')v={};
-  return {search:typeof v.search==='string'?v.search.slice(0,200):'',category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',
-    availability:['flea','banned','unpriced'].includes(v.availability)?v.availability:'all',favoritesOnly:v.favoritesOnly===true};
 }
 const state={
  market:Object.hasOwn(MARKETS,params.get('market'))?params.get('market'):Object.hasOwn(MARKETS,saved.market)?saved.market:'pve',
  uiRevision:UI_REVISION,
- page:params.get('view')==='monitor'?'loot':PAGES.includes(params.get('view'))?params.get('view'):PAGES.includes(saved.page)?saved.page:'loot',
+ page:resolvePage(params.get('view'),saved,params.get('market')||saved.market||'pve'),
  profiles:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,normalizeProfile(saved.profiles?.[k])])),
  views:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,safeView(saved.views?.[k])])),favorites:{},
- workspaceViews:Object.fromEntries(Object.keys(MARKETS).map(m=>[m,Object.fromEntries(['loot','flips','crafts'].map(k=>[k,safeView(saved.workspaceViews?.[m]?.[k])]))])),
- catalogViews:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,safeCatalogView(saved.catalogViews?.[k])])),
+ workspaceViews:Object.fromEntries(Object.keys(MARKETS).map(m=>[m,Object.fromEntries(Object.entries(migrateWorkspaceViews(saved,m)).map(([k,v])=>[k,safeView(v)]))])),
  density:saved.density==='compact'?'compact':'standard',
- theme:saved.uiRevision===UI_REVISION&&['light','dark'].includes(saved.theme)?saved.theme:'dark',paused:false
+ theme:['light','dark'].includes(saved.theme)?saved.theme:'dark',paused:false
 };
 for(const market of Object.keys(MARKETS)){
   state.favorites[market]=safeIds(saved.favorites?.[market]);
-  if(saved.uiRevision!==UI_REVISION)state.workspaceViews[market].loot.lootScope='all';
   for(const v of Object.values(state.workspaceViews[market]))Object.assign(v,{includeEvents:state.views[market].includeEvents});
 }
-function view(){return state.workspaceViews[state.market][state.page==='items'?'loot':state.page];}
+function view(){return state.workspaceViews[state.market][state.page];}
 function allViews(){return [state.views[state.market],...Object.values(state.workspaceViews[state.market])];}
-function catalogView(){return state.catalogViews[state.market];}
 function criteria(){return view().criteria||{};}
 let profileComplete=false,animateNext=true,enterTimer;
 function options(){return {...state.profiles[state.market],stack:'single',historyFullProgress:profileComplete,onlyExecutable:criteria().onlyExecutable===true,includeEvents:view().includeEvents===true,allowDelayedTrades:true};}
@@ -90,11 +83,11 @@ let historyBook={},ledger=[],signalCache=new Map(),itemSignalCache=new Map(),pen
 const updateWindow=createUpdateWindow(),updateDelay=15000;
 let refreshAbort=null;
 let signalsLoading=false,signalsInfo={checked:0,total:0},detailSequence=0;
-let catalogRows=[],catalogById=new Map(),catalogPage=1,detailTrail=[],routeIndex=new Map();
-const catalogPageSize=60,screenScroll={loot:{loot:0,flips:0,crafts:0},flips:{loot:0,flips:0,crafts:0},crafts:{loot:0,flips:0,crafts:0},items:0};
+let catalogRows=[],catalogById=new Map(),detailTrail=[],routeIndex=new Map();
+const screenScroll=Object.fromEntries(PAGES.map(p=>[p,{list:0,cloud:0}]));
 const histories=new Map(),historyRequests=new Map();
 let quicklookPlan=null,quicklookKey='',quicklookPrices=new Map(),quicklookMarkup=new Map(),quicklookResizeFrame;
-const inQuicklook=()=>state.page==='loot'&&view().lootScope==='scavenging';
+const inQuicklook=()=>state.page==='run';
 const inCloud=()=>inQuicklook()&&view().quicklookView!=='list';
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,3500);}
 async function api(path,market=state.market,signal){
@@ -108,12 +101,8 @@ function syncControls(){
   const v=view();if(!CATEGORIES[v.category]&&v.category!=='all')v.category='all';
   if(!['all','short','favorites'].includes(v.filter))v.filter='all';
   $('#search').value=v.search||'';$('#include-events').checked=v.includeEvents===true;
-  const cv=catalogView();$('#catalog-search').value=cv.search;$('#catalog-category').value=cv.category;$('#catalog-availability').value=cv.availability;$('#catalog-events').checked=v.includeEvents;
-  $('#catalog-favorites').setAttribute('aria-pressed',String(cv.favoritesOnly));
   $$('button[data-page]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.page===state.page)));
-  $('#monitor-toolbar').hidden=state.page==='items';$('#monitor-panel').hidden=state.page==='items';
   syncWorkspace();
-  $('#catalog-toolbar').hidden=state.page!=='items';$('#catalog-panel').hidden=state.page!=='items';
   $$('[data-market]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.market===state.market)));
   document.documentElement.dataset.theme=state.theme;$('#theme').innerHTML=icon(state.theme==='light'?'moon':'sun');
 }
@@ -129,59 +118,41 @@ function rebuild(){
 }
 function switchPage(page){
   if(!PAGES.includes(page)||state.page===page)return;
-  if(state.page!=='items')for(const k of Object.keys(MODULES))screenScroll[state.page][k]=$('#'+k).scrollTop;
-  else screenScroll.items=$('#catalog-scroll').scrollTop;
-  state.page=page;animateNext=true;syncControls();rebuild();render(true);
-  if(page!=='items')for(const k of Object.keys(MODULES))$('#'+k).scrollTop=screenScroll[page][k];
-  else $('#catalog-scroll').scrollTop=screenScroll.items;
+  screenScroll[state.page]={list:$('#'+moduleForPage(state.page)).scrollTop,cloud:$('#loot .quicklook-board')?.scrollTop||0};
+  state.page=page;animateNext=true;syncControls();rebuild();render();
+  $('#'+moduleForPage(page)).scrollTop=screenScroll[page].list;
+  if(inCloud()&&$('#loot .quicklook-board'))$('#loot .quicklook-board').scrollTop=screenScroll[page].cloud;
   history.replaceState(null,'',`?market=${state.market}&view=${page}`);persist();
 }
 function syncWorkspace(){
-  const page=state.page;
+  const page=state.page,mod=moduleForPage(page);
   document.body.dataset.page=page;
-  const titles={loot:['01','捡什么 · 卖什么','单件净利 ↓'],flips:['02','商人倒货','单次净利 ↓'],crafts:['03','藏身处制作','每批净利 ↓'],items:['04','物品一览','单格净值 ↓']};
+  const titles={items:['01','物品一览','单件净利 ↓'],run:['02','跑刀速览','拾取优先级 ↓'],flips:['03','商人倒货','单次净利 ↓'],crafts:['04','藏身处制作','每批净利 ↓']};
   $('#page-number').textContent=titles[page][0];$('#page-title').textContent=titles[page][1];$('#sort-indicator').textContent=titles[page][2];
-  $$('[data-page-count]').forEach(el=>el.hidden=el.dataset.pageCount!==page);
-  $('#context-toolbar').hidden=page==='items';$('#catalog-context').hidden=page!=='items';
-  $('#loot-scopes').hidden=page!=='loot';$('#station-filter-label').hidden=page!=='crafts';
-  $$('[data-module]').forEach(el=>el.hidden=el.dataset.module!==page);
-  $$('[data-loot-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lootScope===view().lootScope)));
+  $$('[data-page-count]').forEach(el=>el.hidden=el.dataset.pageCount!==mod);
+  $('#station-filter-label').hidden=page!=='crafts';
+  $$('[data-module]').forEach(el=>el.hidden=el.dataset.module!==mod);
   syncQuicklook();
 }
 function syncQuicklook(){
   const active=inQuicklook(),cloud=inCloud();
   document.body.dataset.quicklook=cloud?'cloud':active?'list':'off';
-  $('#quicklook-controls').hidden=!active;
-  $('#quicklook-rangebar').hidden=!active;
-  if(active)syncQuicklookRange();
+  $('#quicklook-controls').hidden=!active;$('#quicklook-presets').hidden=!active;
+  if(active){
+    const v=view();$('#quicklook-type-count').textContent=v.quicklookTypes.length;
+    $('#quicklook-types-button').title=v.quicklookTypes.map(k=>SCAVENGING_CATEGORIES[k]).join('、')||'选择要显示的物品类型';
+    $$('[data-quicklook-preset]').forEach(b=>b.setAttribute('aria-pressed',String(matchesQuicklookPreset(v,QUICKLOOK_PRESETS[b.dataset.quicklookPreset]))));
+  }
   $$('[data-quicklook-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quicklookView===view().quicklookView)));
   $('#quicklook-repack').hidden=!cloud;
-
   $('#loot').classList.toggle('quicklook-view',cloud);
-  $('#loot').setAttribute('aria-label',cloud?'跑刀速览物品图标云':'拾取与出售排行');
-  if(state.page==='loot'){
-    $('#page-title').textContent=active?'跑刀速览':'捡什么 · 卖什么';
-    $('#sort-indicator').textContent=cloud?'单格净值 · ₽':active?'单格净值 ↓':'单件净利 ↓';
-  }
-}
-const rangeLabel=index=>QUICKLOOK_VALUE_STEPS[index]===null?'无上限':QUICKLOOK_VALUE_STEPS[index]===0?'0':QUICKLOOK_VALUE_STEPS[index]/10000+'万';
-function syncQuicklookRange(){
-  const v=view(),[low,high]=v.quicklookRange,last=QUICKLOOK_VALUE_STEPS.length-1;
-  $('#quicklook-type-count').textContent=v.quicklookTypes.length;
-  $('#quicklook-types-button').title=v.quicklookTypes.map(k=>SCAVENGING_CATEGORIES[k]).join('、')||'选择要显示的物品类型';
-  for(const [id,index] of [['quicklook-min',low],['quicklook-max',high]]){
-    const input=$('#'+id);input.value=index;input.setAttribute('aria-valuetext',rangeLabel(index)+(index===last?'':'卢布每格'));
-  }
-  $('#quicklook-range-value').textContent=rangeLabel(low)+' — '+rangeLabel(high);
-  $('#quicklook-range-track').style.setProperty('--range-start',low/last*100+'%');
-  $('#quicklook-range-track').style.setProperty('--range-end',high/last*100+'%');
-  $$('[data-quicklook-preset]').forEach(button=>button.setAttribute('aria-pressed',String(matchesQuicklookPreset(v,QUICKLOOK_PRESETS[button.dataset.quicklookPreset]))));
+  $('#loot').setAttribute('aria-label',active?'跑刀速览物品':'物品一览');
 }
 function renderQuicklookTypeChoices(selected){
   $('#quicklook-type-options').innerHTML=Object.entries(SCAVENGING_CATEGORIES).map(([key,label])=>`<label class="type-choice"><input type="checkbox" data-quicklook-type="${key}" ${selected.includes(key)?'checked':''}><span>${esc(label)}</span></label>`).join('');
 }
 function resetCurrentFilters(){
-  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents,lootScope:v.lootScope,quicklookView:v.quicklookView}));
+  const v=view();Object.assign(v,safeView({includeEvents:v.includeEvents,quicklookView:v.quicklookView}));
   syncControls();rebuild();render();persist();
 }
 
@@ -204,45 +175,9 @@ function signal(row){
   const result={...s,short,watch:false,long:stable.long&&(row.kind==='loot'||row.profit>0),longReason:stable.reason,longDays:stable.days};signalCache.set(key,result);return result;
 }
 const aliases={ledx:'ledx',gpu:'显卡',bitcoin:'比特币',sugar:'白糖',water:'水',filter:'滤芯',led:'ledx',xianka:'显卡',baitang:'白糖',lvxin:'滤芯',shuixing:'水',yaoshi:'钥匙',yiliaobao:'医疗包',zhentou:'注射器'};
-function catalogRow(r){
-  const i=r.item,s=signal(r),fav=state.favorites[state.market].includes(i.id);
-  const fleaBest=r.fleaNet!==null&&r.channel==='跳蚤',traderBest=r.traderNet!==null&&r.channel!=='跳蚤';
-  const variant=i.isPreset?(i.category==='weapon'?(i.default?'默认整枪':'改装预设'):'装备预设'):i.defaultPreset&&i.category==='weapon'?'机匣':i.currencyOnly?'货币':'';
-  const quoted=!r.banned&&Number.isFinite(i.price)&&i.price>0;
-  const cells=[`<td><button class="catalog-item" data-open="${i.id}"><span class="item-picture">${image(i.image)}</span><span class="catalog-identity"><strong>${esc(i.name)}</strong><span>${esc(CATEGORIES[i.category])}${variant?' · '+variant:''}</span><span class="catalog-tags">${tags(r,s)}</span></span></button></td>`,
-    `<td data-label="占格"><b>${r.slots===null?'—':i.width+' × '+i.height}</b><small>${r.count>1?'×'+fmt(r.count)+' 满叠':i.stack>1?'可叠 '+fmt(i.stack):'单件'}</small></td>`,
-    `<td data-label="跳蚤单价" class="${r.status==='可参考'?'':'quote-muted'}"><b>${quoted?fmt(i.price):'—'}</b><small>24h均价 ${fmt(i.average)}</small><small title="${i.scan?clock(i.scan):'报价时间未知'}">${r.status==='可参考'?ago(i.scan):esc(r.status)}</small></td>`,
-    `<td data-label="跳蚤净到手" class="${fleaBest?'best-channel':''}"><b>${fmt(r.fleaNet)}${fleaBest?icon('check'):''}</b><small>${r.fee===null?'—':'手续费 '+fmt(r.fee)}</small></td>`,
-    `<td data-label="商人回收" class="${traderBest?'best-channel':''}"><b>${fmt(r.traderNet)}${traderBest?icon('check'):''}</b><small>${esc(data.traders[r.vendor?.trader]?.name|| (r.vendor?'商人':'不收购'))}</small></td>`,
-    `<td data-label="单格净值" class="catalog-slot"><b>${fmt(r.slotValue)}</b><small>${Number.isFinite(r.net)?esc(r.channel):'暂无有效售价'}</small></td>`,
-    `<td class="catalog-star"><button class="favorite ${fav?'active':''}" data-favorite="${i.id}" aria-label="${fav?'取消收藏':'收藏'}${esc(i.name)}" aria-pressed="${fav}">${icon('star')}</button></td>`];
-  return `<tr data-catalog-id="${i.id}" data-open="${i.id}" class="${opportunityTone(r,s)}">${cells.join('')}</tr>`;
-}
-function renderCatalog(preserve=false){
-  if(!data||state.page!=='items')return;
-  const scroller=$('#catalog-scroll'),scroll=preserve?scroller.scrollTop:0;
-  const oldFirst=preserve?[...$('#catalog-body').children].find(el=>el.getBoundingClientRect().bottom>scroller.getBoundingClientRect().top+50):null;
-  const oldId=oldFirst?.dataset.catalogId,offset=oldFirst?oldFirst.getBoundingClientRect().top-scroller.getBoundingClientRect().top:0;
-  const f=catalogView(),filtered=filterCatalog(catalogRows,{...f,includeEvents:view().includeEvents},state.favorites[state.market],aliases);
-  const pages=Math.max(1,Math.ceil(filtered.length/catalogPageSize));catalogPage=Math.min(catalogPage,pages);
-  const start=(catalogPage-1)*catalogPageSize,counts={};
-  for(const r of catalogRows)if(view().includeEvents||!r.item.eventOnly)counts[r.item.category]=(counts[r.item.category]||0)+1;
-  $('#catalog-category').innerHTML='<option value="all">全部分类</option>'+Object.entries(CATEGORIES).map(([k,n])=>`<option value="${k}">${n} · ${counts[k]||0}</option>`).join('');$('#catalog-category').value=f.category;
-  $('#items-count').textContent=fmt(filtered.length);$('#items-total').textContent=`/ ${fmt(catalogRows.length)} 个物品档案`;
-  $('#catalog-body').innerHTML=filtered.slice(start,start+catalogPageSize).map(catalogRow).join('');
-  $('#catalog-empty').hidden=filtered.length>0;
-  $('#catalog-empty').innerHTML=filtered.length?'':`${icon('search')}<strong>没有符合条件的物品</strong><p>${f.favoritesOnly?'试试取消“只看收藏”，或调整其他筛选。':'试试更短的名称、英文简称，或调整分类与活动开关。'}</p><button data-catalog-reset>重置筛选</button>`;
-  $('#catalog-range').textContent=filtered.length?`${fmt(start+1)}–${fmt(Math.min(start+catalogPageSize,filtered.length))} / ${fmt(filtered.length)} 项 · 卢布 ₽`:'0 项';
-  $('#catalog-page').textContent=`${catalogPage} / ${pages}`;$('#catalog-prev').disabled=catalogPage<=1;$('#catalog-next').disabled=catalogPage>=pages;
-  $('#catalog-favorites').setAttribute('aria-pressed',String(f.favoritesOnly));
-  $('#catalog-summary').textContent=(CATEGORIES[f.category]||'全部分类')+' · 单格净值倒序';
-  scroller.scrollTop=scroll;
-  const target=oldId?$('#catalog-body').querySelector(`[data-catalog-id="${oldId}"]`):null;
-  if(target)scroller.scrollTop+=target.getBoundingClientRect().top-scroller.getBoundingClientRect().top-offset;
-}
 function matches(row){
   const v=view(),c=criteria(),i=row.item,quick=row.kind==='loot'&&inQuicklook();
-  if(quick&&(!isScavengingItem(i,v.quicklookTypes)||!quicklookRangeMatches(row.slotValue,v.quicklookRange)))return false;
+  if(quick&&!isScavengingItem(i,v.quicklookTypes))return false;
   if(row.kind==='craft'&&v.station!=='all'&&row.station?.id!==v.station)return false;
   if(!quick&&v.category!=='all'&&v.category!==i.category)return false;
   if(v.filter==='favorites'&&!state.favorites[state.market].includes(i.id))return false;
@@ -251,7 +186,7 @@ function matches(row){
   if(row.kind!=='loot'&&((c.minProfit>0&&(!Number.isFinite(row.profit)||c.minProfit>row.profit))||(c.budget>0&&(!Number.isFinite(row.purchase)||row.purchase>c.budget))))return false;
   if(row.kind==='craft'&&c.maxHours>0&&row.hours>c.maxHours)return false;
   const term=(v.search||'').trim().toLowerCase();if(!term)return true;
-  const text=[i.name,i.shortName,i.english,i.slug,row.trader?.name,row.trader?.slug,row.station?.name,...(row.recipe||[]).map(m=>`${m.item.name} ${m.item.english}`)].join(' ').toLowerCase();
+  const text=[i.id,i.name,i.shortName,i.english,i.slug,row.trader?.name,row.trader?.slug,row.station?.name,...(row.recipe||[]).map(m=>`${m.item.name} ${m.item.english}`)].join(' ').toLowerCase();
   const words=new Set(text.split(/[^a-z0-9]+/));
   return term.split(/\s+/).every(t=>aliases[t]?text.includes(aliases[t])||words.has(t):text.includes(t));
 }
@@ -267,7 +202,7 @@ function tags(r,s){
 }
 function metric(label,value){return `<div><label>${label}</label><b>${value}</b></div>`;}
 function quicklookTile(r,cell,index){
-  const i=r.item,s=signal(r),tone=opportunityTone(r,s),old=quicklookPrices.get(r.id);
+  const i=r.item,s=signal(r),rarity=itemRarity(i),tone=opportunityTone(r,s),old=quicklookPrices.get(r.id);
   const amount=r.slotValue>=10000?(Math.round(r.slotValue/1000)/10).toLocaleString('zh-CN',{maximumFractionDigits:1}):fmt(r.slotValue);
   const unit=r.slotValue>=10000?'万':'₽';
   const packCount=i.types.includes('ammoBox')?(i.containsItems||[]).reduce((sum,p)=>sum+p.count,0):0;
@@ -275,10 +210,10 @@ function quicklookTile(r,cell,index){
   const vendor=data.traders[r.vendor?.trader]?.name;
   const traderWins=vendor&&Number.isFinite(r.fleaNet)&&Number.isFinite(r.traderNet)&&r.traderNet>r.fleaNet;
   const risk=data.flea.enabled&&!i.types.includes('noFlea')&&lowOfferCount(i);
-  const status=s.short?`<span class="cloud-signal">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}</span>`:s.long?'<span class="cloud-signal">长期高值</span>':'';
+  const status=s.short?`<span class="cloud-signal">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}</span>`:s.long?'<span class="cloud-signal">长期高值</span>':rarity.key!=='Unknown'?`<span class="cloud-signal rarity-label">${rarity.label}</span>`:'';
   const flag=risk?`<span class="cloud-risk" title="当前仅 ${i.offers} 条报价，可能存在虚标">报价 ${i.offers}</span>`:'';
   const note=traderWins?`<span class="cloud-vendor">卖 ${esc(vendor)}</span>`:r.fleaNet===null&&vendor?`<span class="cloud-vendor">${esc(vendor)} 回收</span>`:'';
-  return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · ${esc(r.channel)} · 单格净值 ₽${fmt(r.slotValue)}">
+  return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · SPT ${rarity.label} · 优先级 ${Math.round(r.quicklookScore)} · 单格净值 ₽${fmt(r.slotValue)}">
     <span class="cloud-topline">${status}${flag}</span>
     <span class="cloud-art">${image(i.art||i.image,'','cloud-image',i.image)}</span>
     <span class="cloud-caption"><span class="cloud-name">${esc(name)}</span><span class="cloud-value"><strong>${amount}</strong><span>${unit}<small>/ 格</small></span></span>${note}</span>
@@ -292,9 +227,9 @@ function renderQuicklook(){
   const previous=key===quicklookKey?quicklookPlan:null;
   const grid=root.querySelector('.quicklook-grid'),board=grid.parentElement;
   const compact=state.density==='compact',height=board.clientHeight-20;
-  const fit=quicklookLayout([],{width:board.clientWidth-20,height,compact,spotlight:false});
-  const rowHeight=Math.max(compact?94:104,(height-7*(fit.rows-1))/fit.rows);
-  const plan=quicklookLayout(visible.loot,{width:board.clientWidth-20,height,compact,spotlight:false,showAll:true,previous});
+  const fit=quicklookLayout([],{width:board.clientWidth-20,height,compact});
+  const rowHeight=compact?112:124;
+  const plan=quicklookLayout(visible.loot,{width:board.clientWidth-20,height,compact,showAll:true,previous});
   grid.style.height=(plan.rows*rowHeight+7*(plan.rows-1)+20)+'px';
   if(key!==quicklookKey)board.scrollTop=0;
   grid.style.setProperty('--cloud-columns',plan.columns);grid.style.setProperty('--cloud-rows',plan.rows);
@@ -315,7 +250,7 @@ function renderQuicklook(){
   quicklookPlan=plan;quicklookKey=key;quicklookMarkup=markup;
   quicklookPrices=new Map(visible.loot.map(r=>[r.id,r.slotValue]));
   if(focused)root.querySelector(`[data-cloud-id="${focused}"]`)?.focus({preventScroll:true});
-  $('#quicklook-coverage').textContent=`${fmt(visible.loot.length)} 项 · 单格净值 ↓${plan.rows>fit.rows?' · 下滑查看更多':''}`;
+  $('#quicklook-coverage').textContent=`${fmt(visible.loot.length)} 项 · 按拾取优先级排列${plan.rows>fit.rows?' · 下滑查看更多':''}`;
 }
 function card(r,index){
   const i=r.item,s=signal(r),loot=r.kind==='loot',craft=r.kind==='craft',fav=state.favorites[state.market].includes(i.id);
@@ -342,23 +277,25 @@ function card(r,index){
 }
 function anchors(){return Object.fromEntries(['loot','flips','crafts'].map(k=>{const el=$('#'+k),top=el.getBoundingClientRect().top;const first=[...el.querySelectorAll('.card')].find(c=>c.getBoundingClientRect().bottom>top);return [k,{top:el.scrollTop,id:first?.dataset.row,offset:first?first.getBoundingClientRect().top-top:0}];}));}
 function render(preserve=false){
-  if(!data)return;syncQuicklook();const savedAnchors=preserve&&state.page!=='items'?anchors():null,counts={};for(const r of (rows[state.page]||rows.loot))counts[r.item.category]=(counts[r.item.category]||0)+1;
-  $('#category').innerHTML=`<option value="all">全部分类 · ${(rows[state.page]||rows.loot).length}</option>`+Object.entries(CATEGORIES).map(([k,n])=>`<option value="${k}">${n} · ${counts[k]||0}</option>`).join('');$('#category').value=view().category;
+  if(!data)return;syncQuicklook();const savedAnchors=preserve?anchors():null,counts={};for(const r of (rows[moduleForPage(state.page)]||rows.loot))counts[r.item.category]=(counts[r.item.category]||0)+1;
+  $('#category').innerHTML=`<option value="all">全部分类 · ${(rows[moduleForPage(state.page)]||rows.loot).length}</option>`+Object.entries(CATEGORIES).map(([k,n])=>`<option value="${k}">${n} · ${counts[k]||0}</option>`).join('');$('#category').value=view().category;
   const stations=[...new Map(rows.crafts.filter(r=>r.station).map(r=>[r.station.id,r.station])).values()];
   $('#station-filter').innerHTML='<option value="all">全部设施</option>'+stations.map(st=>`<option value="${esc(st.id)}">${esc(st.name)}</option>`).join('');
   if(!stations.some(st=>st.id===view().station))view().station='all';$('#station-filter').value=view().station;
-  $$('[data-loot-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lootScope===view().lootScope)));
 
   for(const key of ['loot','flips','crafts']){
     visible[key]=rows[key].filter(matches);
-    if(key==='loot'&&!inQuicklook())visible[key].sort((a,b)=>b.net-a.net||a.id.localeCompare(b.id));
+    if(key==='loot'){
+      if(inQuicklook())visible[key]=visible[key].map(r=>({...r,quicklookScore:lootPriority(r,signal(r))})).sort(compareLootPriority);
+      else visible[key].sort((a,b)=>b.net-a.net||a.id.localeCompare(b.id));
+    }
     $('#'+key+'-count').textContent=fmt(visible[key].length);
-    if(state.page!==key)continue;
+    if(moduleForPage(state.page)!==key)continue;
     if(key==='loot'&&inCloud()&&visible.loot.length){renderQuicklook();continue;}
     let message='尝试放宽分类、预算或解锁条件。',title='暂无符合条件的机会';
     if(view().filter==='favorites'){title='这里还没有收藏';message='点物品右下角的星标，下次就能快速找到。';}
     if(view().filter==='short'){title=signalsLoading?'正在核对涨价机会':'暂无符合条件的涨价机会';message='尝试放宽筛选，或稍后查看新行情。';}
-    $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p>${key==='loot'&&view().lootScope==='scavenging'?'<button data-loot-scope="all">在全部物品中查找</button>':''}<button data-reset>重置筛选</button></div>`;
+    $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p>${key==='loot'&&inQuicklook()?'<button data-page="items">在物品一览中查找</button>':''}<button data-reset>重置筛选</button></div>`;
     if(inCloud()&&!visible[key].length)$('#'+key+' .empty').insertAdjacentHTML('beforeend','<button data-quicklook-view="list">查看完整列表</button>');
     if(visible[key].length>limit[key])$('#'+key).insertAdjacentHTML('beforeend',`<button class="load-more" data-more="${key}">继续查看 ${Math.min(40,visible[key].length-limit[key])} 项 ${icon('arrow-down')}</button>`);
     if(savedAnchors){const a=savedAnchors[key],el=$('#'+key),target=[...el.querySelectorAll('.card')].find(c=>c.dataset.row===a.id);el.scrollTop=a.top;if(target)el.scrollTop+=target.getBoundingClientRect().top-el.getBoundingClientRect().top-a.offset;}
@@ -368,15 +305,13 @@ function render(preserve=false){
   $('#favorite-count').textContent=state.favorites[state.market].length||'';renderFilterSummary();
   $('#coverage').textContent=`${MARKETS[state.market]} · ${fmt(data.rawCount)} 物品 · 每5分钟刷新`;
 
-  renderCatalog(preserve);
-  if(animateNext){const el=state.page==='items'?$('#catalog-panel'):$('#'+state.page);el.classList.add('is-entering');clearTimeout(enterTimer);enterTimer=setTimeout(()=>$$('.is-entering').forEach(e=>e.classList.remove('is-entering')),650);animateNext=false;}
+  if(animateNext){const el=$('#'+moduleForPage(state.page));el.classList.add('is-entering');clearTimeout(enterTimer);enterTimer=setTimeout(()=>$$('.is-entering').forEach(e=>e.classList.remove('is-entering')),650);animateNext=false;}
 }
 function renderFilterSummary(){
-  const v=state.page==='items'?catalogView():view(),chips=[];
+  const v=view(),chips=[];
   if(!inQuicklook()&&v.category!=='all')chips.push(['category',CATEGORIES[v.category]]);
   if(view().includeEvents)chips.push(['events','含活动品']);
-  if(state.page==='items'){if(v.availability!=='all')chips.push(['availability',{flea:'跳蚤可估值',banned:'跳蚤禁售',unpriced:'暂无售价'}[v.availability]]);}
-  else for(const [key,label] of [['minSlot','单格 ≥'],['minProfit','净利 ≥'],['budget','预算 ≤'],['maxHours','工时 ≤'],['onlyExecutable','条件已满足'],['freshOnly','1小时内报价']]){
+  for(const [key,label] of [['minSlot','单格 ≥'],['minProfit','净利 ≥'],['budget','预算 ≤'],['maxHours','工时 ≤'],['onlyExecutable','条件已满足'],['freshOnly','1小时内报价']]){
     if(inQuicklook()&&key==='minSlot')continue;
     const n=criteria()[key];if(n)chips.push([key,typeof n==='boolean'?label:label+' '+fmt(n)+(key==='maxHours'?'h':'')]);
   }
@@ -431,7 +366,7 @@ async function refresh(force=false){
   try{
     const result=await api('dashboard',market,refreshAbort.signal);if(seq!==sequence)return;
     if(!data){loadingPhase(1,'正在核对价格与收益');await nextPaint();if(seq!==sequence)return;}
-    const snapshot=result.snapshot;
+    const snapshot=applyEventMetadata(result.snapshot);
     warning(snapshot.warning||snapshot.collectionWarning||(Date.now()-Date.parse(snapshot.fetchedAt)>15*60000?'行情更新中，当前显示上次成功快照。':''));
     if(!data||force||snapshot.fetchedAt!==data.fetchedAt||result.signals.checkedAt!==signalsInfo.checkedAt){
       pendingSnapshot=snapshot;pendingSignals=result.signals;pendingLedger=result.ledger||[];
@@ -453,10 +388,9 @@ function loading(){
   loadingPhase(0,'正在接收市场情报');
   for(const k of ['loot','flips','crafts']){$('#'+k).innerHTML='';$('#'+k+'-count').textContent='—';}
   const categories='<option value="all">全部分类</option>'+Object.entries(CATEGORIES).map(([k,n])=>`<option value="${k}">${n}</option>`).join('');
-  $('#category').innerHTML=categories;$('#category').value=view().category;$('#catalog-category').innerHTML=categories;$('#catalog-category').value=catalogView().category;
+  $('#category').innerHTML=categories;$('#category').value=view().category;
   $('#coverage').textContent=`${MARKETS[state.market]} · 正在读取该市场行情`;
-  $('#catalog-body').innerHTML='';$('#catalog-empty').hidden=true;
-  $('#items-count').textContent='—';$('#items-total').textContent='';$('#catalog-range').textContent='读取物品档案中';$('#catalog-page').textContent='—';$('#catalog-prev').disabled=true;$('#catalog-next').disabled=true;
+
 }
 async function getHistory(item,market=state.market){
   if(item.valuationId)item=data.items[item.valuationId];
@@ -520,7 +454,7 @@ function detailMarkup(r){
   const i=r.item,loot=r.kind==='loot',craft=r.kind==='craft',s=signal(r);
   const materialRows=(r.recipe||[]).map(m=>`<button class="cost-material" data-open="${esc(m.item.id)}">${image(m.item.image)}<span class="cost-material-name"><strong>${esc(m.item.name)} <em>×${m.count}</em></strong><small>${m.tool?'可复用工具':`${esc(m.source)} · 单价 ₽${fmt(m.unitCost)}`}</small></span><span class="cost-material-value"><b>${m.tool?(m.capital===null?'待核价':'₽'+fmt(m.capital)):'₽'+fmt(m.cost)}</b>${m.tool?'<small>首购另计</small>':''}</span>${icon('chevron')}</button>`).join('');
   const conditions=r.execution?.missing||[],task=data.tasks?.[r.task];
-  return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}</div></div></div>
+  return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}${loot&&itemRarity(i).key!=='Unknown'?`<a class="tag rarity-tag" href="${esc(SPT_SOURCE.source)}" target="_blank" rel="noreferrer" title="SPT 4.1+ 稀有度参考">SPT · ${itemRarity(i).label}</a>`:''}</div></div></div>
   <div class="detail-actions">${detailTrail.length?'<button id="detail-back">← 返回</button>':''}<button data-favorite="${i.id}">${icon('star')}${state.favorites[state.market].includes(i.id)?'已收藏':'收藏'}</button><button id="share-item">${icon('copy')}复制链接</button></div>
   <div class="detail-metrics"><div class="detail-metric"><small>${loot?'净利 / 个':craft?'最终净利润 / 批':'预计净利润 / 次'}</small><strong class="${!loot&&r.profit<0?'negative':''}">₽${fmt(loot?r.net:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'每格净到手':craft?'每批产出净到手':'预计净回款'}</small><strong>₽${fmt(loot?r.slotValue:r.net)}</strong></div></div>
   ${loot?channelComparison(r):`<section class="purchase-detail"><div class="trade-summary"><span>${craft?'材料成本':'进货成本'} <b>₽${fmt(r.purchase)}</b></span><span>上架手续费 <b>₽${fmt(r.fee)}</b></span></div>${materialRows?`<div class="cost-materials">${materialRows}</div>`:`<div class="purchase-source">${esc(r.trader?.name||'商人')} · ${r.isBarter?'兑换':'直购'} ×${r.count}</div>`}${craft?`<div class="craft-reference"><span>制作 ${duration(r.seconds)} · 产出 ×${r.count}</span><span>参考时薪 ${sign(r.hourly)}</span></div>`:''}</section>`}
@@ -573,31 +507,23 @@ function showSettings(){
 function showInfo(title,html){$('#info-title').textContent=title;$('#info-content').innerHTML=html;$('#info-dialog').showModal();}
 function toggleFavorite(id){const list=state.favorites[state.market],index=list.indexOf(id);if(index<0)list.push(id);else list.splice(index,1);persist();render(true);if(detailRow?.item.id===id){const button=$('#detail-content [data-favorite]');if(button)button.innerHTML=icon('star')+(index<0?'已收藏':'收藏');}toast(index<0?'已收藏；收藏页仍按价值排序。':'已取消收藏');}
 function showFilters(){
-  const c=criteria(),catalog=state.page==='items',quick=inQuicklook();
+  const c=criteria(),quick=inQuicklook(),mod=moduleForPage(state.page);
   $('#filters-title').textContent=quick?'跑刀速览筛选':'筛选条件';
   $('#quicklook-filter-fields').hidden=!quick;$('#coarse-category-field').hidden=quick;
   $('#clear-filters').textContent=quick?'恢复默认':'清除筛选';
-  if(quick){
-    renderQuicklookTypeChoices(view().quicklookTypes);
-    for(const [id,index] of [['quicklook-filter-min',0],['quicklook-filter-max',1]]){
-      $('#'+id).innerHTML=QUICKLOOK_VALUE_STEPS.map((value,i)=>value===null&&index===0?'':`<option value="${i}">${rangeLabel(i)}</option>`).join('');
-      $('#'+id).value=view().quicklookRange[index];
-    }
-  }
-  $('#normal-filter-fields').hidden=catalog;$('#catalog-filter-fields').hidden=!catalog;
+  if(quick)renderQuicklookTypeChoices(view().quicklookTypes);
   for(const [id,key] of [['min-slot','minSlot'],['min-profit','minProfit'],['budget','budget'],['max-hours','maxHours']])$('#'+id).value=c[key]||'';
   $('#only-executable').checked=c.onlyExecutable||false;$('#fresh-only').checked=c.freshOnly||false;
   $('#category').value=view().category;$('#include-events').checked=view().includeEvents;
-  $('#catalog-category').value=catalogView().category;$('#catalog-availability').value=catalogView().availability;$('#catalog-events').checked=view().includeEvents;
-  $$('[data-filter-for]').forEach(el=>el.hidden=el.dataset.filterFor==='trades'?!['flips','crafts'].includes(state.page):el.dataset.filterFor!==state.page);
-  $('#min-slot-field').hidden=state.page!=='loot'||quick;
+  $$('[data-filter-for]').forEach(el=>el.hidden=el.dataset.filterFor==='trades'?!['flips','crafts'].includes(mod):el.dataset.filterFor!==mod);
+  $('#min-slot-field').hidden=mod!=='loot'||quick;
   $('#filters').showModal();
 }
-function exportSettings(){const blob=new Blob([JSON.stringify({version:3,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function exportSettings(){const blob=new Blob([JSON.stringify({version:4,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function importSettings(file){
-  try{if(!file||file.size>512000)throw new Error('请选择小于500KB的设置文件');const p=JSON.parse(await file.text());if(![2,3].includes(p.version)||!p.profiles)throw new Error('不是本应用的设置备份');
-    for(const m of Object.keys(MARKETS)){state.profiles[m]=normalizeProfile(p.profiles[m]);state.favorites[m]=safeIds(p.favorites?.[m]);state.workspaceViews[m]=Object.fromEntries(['loot','flips','crafts'].map(k=>[k,safeView(p.workspaceViews?.[m]?.[k])]));state.views[m]=safeView(p.views?.[m]);state.catalogViews[m]=safeCatalogView(p.catalogViews?.[m]);}
-    for(const m of Object.keys(MARKETS)){if(p.uiRevision!==UI_REVISION)state.workspaceViews[m].loot.lootScope='all';for(const v of Object.values(state.workspaceViews[m]))Object.assign(v,{includeEvents:state.views[m].includeEvents});}
+  try{if(!file||file.size>512000)throw new Error('请选择小于500KB的设置文件');const p=JSON.parse(await file.text());if(![2,3,4].includes(p.version)||!p.profiles)throw new Error('不是本应用的设置备份');
+    for(const m of Object.keys(MARKETS)){state.profiles[m]=normalizeProfile(p.profiles[m]);state.favorites[m]=safeIds(p.favorites?.[m]);state.workspaceViews[m]=Object.fromEntries(Object.entries(migrateWorkspaceViews(p,m)).map(([k,v])=>[k,safeView(v)]));state.views[m]=safeView(p.views?.[m]);}
+    for(const m of Object.keys(MARKETS)){for(const v of Object.values(state.workspaceViews[m]))Object.assign(v,{includeEvents:state.views[m].includeEvents});}
     if(['light','dark'].includes(p.theme))state.theme=p.theme;if(['standard','compact'].includes(p.density))state.density=p.density;
     persist();syncControls();rebuild();render(true);$('#settings').close('cancel');toast('已导入角色条件、显示偏好与收藏。');
   }catch(error){toast('导入失败：'+error.message);}
@@ -612,51 +538,38 @@ document.addEventListener('click',event=>{
 
   if(target.dataset.close)closePanel($('#'+target.dataset.close));
   if(target.dataset.settingsTab)settingsTab(target.dataset.settingsTab);
-  if(target.dataset.clearFilter){const key=target.dataset.clearFilter,v=state.page==='items'?catalogView():view();if(key==='events')allViews().forEach(x=>x.includeEvents=false);else if(['category','availability'].includes(key))v[key]='all';else view().criteria[key]=0;catalogPage=1;syncControls();rebuild();render();persist();}
+  if(target.dataset.clearFilter){const key=target.dataset.clearFilter,v=view();if(key==='events')allViews().forEach(x=>x.includeEvents=false);else if(key==='category')v[key]='all';else view().criteria[key]=0;syncControls();rebuild();render();persist();}
   if(target.dataset.more){limit[target.dataset.more]+=40;render(true);}
   if(target.hasAttribute('data-reset')||target.id==='reset-visible-filters')resetCurrentFilters();
   if(target.hasAttribute('data-retry'))refresh(true);
   if(target.dataset.days){chartDays=Number(target.dataset.days);$$('[data-days]').forEach(b=>b.classList.toggle('active',Number(b.dataset.days)===chartDays));historyDetail();}
   if(target.dataset.quicklookView){view().quicklookView=target.dataset.quicklookView;animateNext=true;render();persist();}
-  if(target.dataset.quicklookPreset||target.id==='quicklook-range-default'){
-    const preset=QUICKLOOK_PRESETS[target.dataset.quicklookPreset]||{types:DEFAULT_SCAVENGING_CATEGORIES,range:DEFAULT_QUICKLOOK_RANGE};
-    view().quicklookTypes=[...preset.types];view().quicklookRange=[...preset.range];animateNext=true;render();persist();
+  if(target.dataset.quicklookPreset||target.id==='quicklook-default'){
+    const preset=QUICKLOOK_PRESETS[target.dataset.quicklookPreset]||{types:DEFAULT_SCAVENGING_CATEGORIES};
+    view().quicklookTypes=[...preset.types];animateNext=true;render();persist();
   }
   if(target.dataset.quicklookSelect){const choice=target.dataset.quicklookSelect;$$('[data-quicklook-type]').forEach(el=>el.checked=choice==='all'||(choice==='default'&&DEFAULT_SCAVENGING_CATEGORIES.includes(el.dataset.quicklookType)));}
   if(target.id==='quicklook-repack'){quicklookPlan=null;animateNext=true;render(true);}
-  if(target.dataset.lootScope){view().lootScope=target.dataset.lootScope;animateNext=true;render();persist();}
   if(target.dataset.filter){view().filter=target.dataset.filter;animateNext=true;render();persist();}
-  if(target.id==='catalog-reset'||target.hasAttribute('data-catalog-reset')){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();renderCatalog();renderFilterSummary();persist();}
   if(target.dataset.market&&target.dataset.market!==state.market){
     clearTimeout(applyTimer);updateWindow.clear();
     state.market=target.dataset.market;sequence++;detailSequence++;data=null;detailRow=null;detailTrail=[];historyBook={};ledger=[];signalCache.clear();pendingSnapshot=null;pendingSignals=null;pendingLedger=null;itemSignalCache.clear();
-    catalogRows=[];catalogById=new Map();routeIndex=new Map();catalogPage=1;screenScroll.items=0;for(const p of ['loot','flips','crafts'])screenScroll[p]={loot:0,flips:0,crafts:0};
+    catalogRows=[];catalogById=new Map();routeIndex=new Map();for(const p of PAGES)screenScroll[p]={list:0,cloud:0};
     signalsInfo={checked:0,total:0};limit={loot:40,flips:30,crafts:30};rows={loot:[],flips:[],crafts:[]};syncControls();loading();warning('');$('#pending').hidden=true;
     history.replaceState(null,'',`?market=${state.market}&view=${state.page}`);persist();refresh();
   }
 });
-document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.card-main')){e.preventDefault();openDetail(e.target.dataset.open);}if(e.key==='/'&&!$('dialog[open]')&&!/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)){e.preventDefault();$(state.page==='items'?'#catalog-search':'#search').focus();}});
-for(const el of [$('.columns'),$('#catalog-scroll')])el.addEventListener('scroll',()=>{lastInteraction=Date.now();if(pendingSnapshot||pendingSignals)queueApply();},true);
+document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.card-main')){e.preventDefault();openDetail(e.target.dataset.open);}if(e.key==='/'&&!$('dialog[open]')&&!/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)){e.preventDefault();$('#search').focus();}});
+for(const el of [$('.columns')])el.addEventListener('scroll',()=>{lastInteraction=Date.now();if(pendingSnapshot||pendingSignals)queueApply();},true);
 $('#detail-dialog').addEventListener('close',()=>{detailRow=null;detailTrail=[];detailSequence++;signalCache.clear();render(true);if(pendingSnapshot||pendingSignals)queueApply();});
 $('#search').addEventListener('input',e=>{view().search=e.target.value;render();persist();});
-$('#catalog-search').addEventListener('input',e=>{catalogView().search=e.target.value;catalogPage=1;renderCatalog();persist();});
-$('#catalog-favorites').addEventListener('click',()=>{catalogView().favoritesOnly=!catalogView().favoritesOnly;catalogPage=1;renderCatalog();persist();});
-for(const [id,step] of [['catalog-prev',-1],['catalog-next',1]])$('#'+id).addEventListener('click',()=>{catalogPage=Math.max(1,catalogPage+step);renderCatalog();$('#catalog-scroll').focus({preventScroll:true});});
 $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').addEventListener('click',applyPending);
 $('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');const label=state.paused?'恢复自动应用行情':'暂停自动应用行情';$('#pause').setAttribute('aria-label',label);$('#pause').title=label;toast(state.paused?'自动更新已暂停':'自动更新已恢复');queueApply();});
 $('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
+$('#priority-info').addEventListener('click',()=>showInfo('拾取优先级',`<p>单格价值 <b>40%</b> · 常见程度 <b>35%</b> · 短期涨价 <b>25%</b></p><p>常见且值钱、正在涨价的物品更靠前。单格价值超过30万后不再增加权重，低价物品的常见度加分递减。</p><p>稀有度使用 SPT 4.1+ 的公开物品库；未收录按中性权重处理，不据此隐藏物品。</p><a class="source-link" href="https://github.com/emilanderss0n/tarkynator/blob/${SPT_SOURCE.commit}/data/items.json" target="_blank" rel="noreferrer">查看 SPT 数据来源 ↗</a>`));
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
 $('#quicklook-types-button').addEventListener('click',showFilters);
-for(const [id,index] of [['quicklook-min',0],['quicklook-max',1]])$('#'+id).addEventListener('input',e=>{
-  const range=[...view().quicklookRange],value=Number(e.target.value);
-  range[index]=index===0?Math.min(value,range[1]):Math.max(value,range[0]);
-  view().quicklookRange=normalizeQuicklookRange(range);render();persist();
-});
-for(const [id,index] of [['quicklook-filter-min',0],['quicklook-filter-max',1]])$('#'+id).addEventListener('change',e=>{
-  const other=$(index===0?'#quicklook-filter-max':'#quicklook-filter-min');
-  if(index===0&&Number(e.target.value)>Number(other.value)||index===1&&Number(e.target.value)<Number(other.value))other.value=e.target.value;
-});
 $('#density-button').addEventListener('click',()=>{state.density=state.density==='standard'?'compact':'standard';syncControls();if(inCloud()&&data)renderQuicklook();persist();});
 $('#profile-form').addEventListener('submit',e=>{
   e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#settings'));return;}
@@ -671,16 +584,13 @@ $('#task-search').addEventListener('input',e=>{const q=e.target.value.trim().toL
 $('#settings').addEventListener('close',()=>{if(pendingSnapshot||pendingSignals)queueApply();});
 $('#filter-form').addEventListener('submit',e=>{
   e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#filters'));return;}
-  const catalog=state.page==='items',events=$(catalog?'#catalog-events':'#include-events').checked;
-  allViews().forEach(v=>v.includeEvents=events);
-  if(catalog){catalogView().category=$('#catalog-category').value;catalogView().availability=$('#catalog-availability').value;catalogPage=1;}
-  else {
-    if(inQuicklook()){view().quicklookTypes=$$('[data-quicklook-type]').filter(el=>el.checked).map(el=>el.dataset.quicklookType);view().quicklookRange=normalizeQuicklookRange([Number($('#quicklook-filter-min').value),Number($('#quicklook-filter-max').value)]);}
-    else view().category=$('#category').value;
-    view().criteria={minSlot:inQuicklook()?criteria().minSlot:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};}
+  allViews().forEach(v=>v.includeEvents=$('#include-events').checked);
+  if(inQuicklook())view().quicklookTypes=$$('[data-quicklook-type]').filter(el=>el.checked).map(el=>el.dataset.quicklookType);
+  else view().category=$('#category').value;
+  view().criteria={minSlot:inQuicklook()?0:Number($('#min-slot').value)||0,minProfit:Number($('#min-profit').value)||0,budget:Number($('#budget').value)||0,maxHours:Number($('#max-hours').value)||0,onlyExecutable:$('#only-executable').checked,freshOnly:$('#fresh-only').checked};
   animateNext=true;syncControls();rebuild();render();persist();closePanel($('#filters'),'save');
 });
-$('#clear-filters').addEventListener('click',()=>{allViews().forEach(v=>v.includeEvents=false);if(state.page==='items'){state.catalogViews[state.market]=safeCatalogView();catalogPage=1;syncControls();rebuild();render();persist();}else resetCurrentFilters();closePanel($('#filters'));});
+$('#clear-filters').addEventListener('click',()=>{allViews().forEach(v=>v.includeEvents=false);resetCurrentFilters();closePanel($('#filters'));});
 $$('dialog').forEach(dialog=>{
   dialog.addEventListener('cancel',e=>{e.preventDefault();closePanel(dialog);});
   dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closePanel(dialog);});
@@ -698,7 +608,7 @@ window.addEventListener('online',()=>refresh());window.addEventListener('offline
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&data&&Date.now()-Date.parse(data.fetchedAt)>300000&&!busy)refresh();});
 document.addEventListener('error',e=>{if(e.target.tagName==='IMG'){if(e.target.dataset.fallback){const fallback=e.target.dataset.fallback;delete e.target.dataset.fallback;e.target.src=fallback;return;}e.target.style.opacity='.15';e.target.title='图片暂不可用';}},true);
 $('#station-filter').addEventListener('change',e=>{view().station=e.target.value;render();persist();});
-if(params.get('view')==='monitor'){params.set('view','loot');history.replaceState(null,'',`?${params}`);}
+if(params.get('view')!==state.page){params.set('view',state.page);history.replaceState(null,'',`?${params}`);}
 for(const type of ['pointermove','pointerdown'])$('#detail-content').addEventListener(type,inspectChartPointer);
 $('#detail-content').addEventListener('pointerout',e=>{if(e.pointerType==='mouse'&&e.target.closest('.history-chart')&&!e.relatedTarget?.closest?.('.history-chart')){$('#chart-tooltip')?.setAttribute('hidden','');$('#chart-cursor')?.setAttribute('hidden','');}});
 $('#detail-content').addEventListener('focusin',e=>{if(e.target.matches('.history-chart'))showChartPoint(chartActive<0?chartSeries.length-1:chartActive);});

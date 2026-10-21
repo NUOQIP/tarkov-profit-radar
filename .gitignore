@@ -25,3 +25,7 @@ outputs/
 /public/engine.js
 /public/update-window.js
 /public/quicklook.js
+
+/public/navigation.mjs
+/public/loot-priority.mjs
+/public/spt-rarity.mjs

@@ -13,8 +13,21 @@ export const EVENT_IDS = new Set([
   '61b9e1aaef9a1b5d6a79899a', '634959225289190e5e773b3b', '655c67ab0d37ca5135388f4b',
   '674d91ce6e862d5a95059ed6', '674da9cf0cb4bcde7103c07b', '67586c61a0c49554ed0bb4a8',
   '6759af0f9c8a538dd70bfae6', '6936fe4a3f4d6dfa3900c33c',
-  '68f119c6121d878a2303eee3', '68f11adfcd0babab2c0fb003'
+  '68f119c6121d878a2303eee3', '68f11adfcd0babab2c0fb003',
+  '6937ed118715e9fd1b0f286d', // Tangerine
+  '67586b7e49c2fa592e0d8ed9', // Olivier salad box
+  '67586bee39b1b82b0d0f9d06'  // Special 40-degree fuel
 ]);
+export const EVENT_METADATA_VERSION = 2;
+export const isEventItem = item => Boolean(item?.eventOnly || EVENT_IDS.has(item?.id));
+// Upgrade cached classifications without invalidating financial history or refetching prices.
+export function applyEventMetadata(data) {
+  if(!data?.items || data.eventMetadataVersion===EVENT_METADATA_VERSION)return data;
+  return {...data,eventMetadataVersion:EVENT_METADATA_VERSION,items:Object.fromEntries(Object.entries(data.items).map(([id,item])=>{
+    const eventOnly=isEventItem(item);
+    return [id,{...item,eventOnly,excluded:Boolean(item.excluded||eventOnly)}];
+  }))};
+}
 const CURRENCY_IDS = new Set(['5449016a4bdc2d6f028b456f', '5696686a4bdc2da3298b456a', '569668774bdc2da2298b4568', '5d235b4d86f7742e017bc88a']);
 const positive = n => Number.isFinite(n) && n > 0;
 const values = x => Array.isArray(x) ? x : Object.values(x || {});
@@ -160,7 +173,7 @@ export function normalizeSnapshot(parts, market, fetchedAt = new Date().toISOStr
     stations[s.id] = { id: s.id, name: names[s.normalizedName] || s.normalizedName, slug: s.normalizedName, image: s.imageLink, maxLevel:Math.max(0,...(s.levels||[]).map(l=>l.level||0)) };
   }
   return {
-    version: 2, profileMetadataVersion:2, imageVersion:1, categoryMetadataVersion:1, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
+    version: 2, profileMetadataVersion:2, imageVersion:1, categoryMetadataVersion:1, eventMetadataVersion:EVENT_METADATA_VERSION, modelVersion:MODEL_VERSION, market, fetchedAt, source: 'https://json.tarkov.dev/' + market + '/items',
     rawCount: Object.keys(raw.items).length, flea: raw.fleaMarket, items, traders, stations,
     barters: parts.barters.data, crafts: parts.crafts.data, history: {},
     tasks:parts.tasks?.data || {}, taskNames:parts.tasks_zh?.data || {}
@@ -259,7 +272,7 @@ export function filterCatalog(rows, filters = {}, favorites = [], aliases = {}) 
   const starred = new Set(favorites);
   return rows.filter(r => {
     const i = r.item;
-    if (i.eventOnly && !filters.includeEvents) return false;
+    if (isEventItem(i) && !filters.includeEvents) return false;
     if (filters.category && filters.category !== 'all' && i.category !== filters.category) return false;
     if (filters.favoritesOnly && !starred.has(i.id)) return false;
     if (filters.availability === 'flea' && r.fleaNet === null) return false;
@@ -273,7 +286,7 @@ export function filterCatalog(rows, filters = {}, favorites = [], aliases = {}) 
 }
 export function isExcluded(item,options={}) {
   if(item.currencyOnly)return true;
-  if(item.eventOnly)return !options.includeEvents;
+  if(isEventItem(item))return !options.includeEvents;
   return Boolean(item.excluded);
 }
 export function procurement(item, data, options = {}, now = Date.now()) {
@@ -344,7 +357,7 @@ export function collectFlips(data, options = {}, now = Date.now()) {
     if(!options.includeUnavailable&&(!Number.isFinite(profit)||(!options.includeLosses&&!positive(profit))))return;
     const row={ id, kind: 'flip', item, ...s, net:s.fleaNet, count, purchase, profit, roi:positive(purchase)&&profit!==null?profit/purchase:null,
       trader: data.traders[trader] || { id:trader, name: '未知商人' }, level, limit, task, recipe, editions, isBarter:id.startsWith('barter-') };
-    row.eventOnly=Boolean(item.eventOnly||recipe?.some(m=>m.item.eventOnly));
+    row.eventOnly=Boolean(isEventItem(item)||recipe?.some(m=>isEventItem(m.item)));
     if(recipe?.some(m=>!m.tool&&m.flea&&m.status==='报价延迟'))row.status='报价延迟';
     row.quoteAt=oldestQuote(row);
     row.execution=executionStatus(row,data,options);
@@ -359,6 +372,7 @@ export function collectFlips(data, options = {}, now = Date.now()) {
   for (const b of data.barters || []) {
     const item = data.items[b.offeredItem?.item];
     if (!item) continue;
+    if(!options.includeEvents&&(b.requiredItems||[]).some(m=>isEventItem(data.items[m.item])))continue;
     const recipe = materials(b.requiredItems, data, options, now);
     if (!recipe && !options.includeUnavailable) continue;
     const purchase = recipe?recipe.reduce((sum, r) => sum + r.cost, 0):null;
@@ -385,7 +399,7 @@ export function collectCrafts(data, options = {}, now = Date.now()) {
     if (!Number.isFinite(profit) || (!options.includeLosses && !positive(profit))) continue;
     const row={ id: 'craft-' + c.id, kind: 'craft', item, ...s, count, purchase, recipe, margin, fuel,
       profit, hourly: profit / hours, hours, seconds: c.duration, station, level: c.level, task: c.taskUnlock, editions:c.gameEditions || [] };
-    row.eventOnly=Boolean(item.eventOnly||recipe.some(m=>m.item.eventOnly)||station?.slug==='christmas-tree');
+    row.eventOnly=Boolean(isEventItem(item)||recipe.some(m=>isEventItem(m.item))||station?.slug==='christmas-tree');
     if(recipe.some(m=>!m.tool&&m.flea&&m.status==='报价延迟'))row.status='报价延迟';
     row.quoteAt=oldestQuote(row);
     row.execution=executionStatus(row,data,options);

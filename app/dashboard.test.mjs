@@ -114,3 +114,16 @@ test('an upstream history failure with an expired fallback leaves neutral eviden
   const signals=await scanSignals(store,data,1);
   assert.deepEqual(signals.entries,{});assert.equal(signals.checked,0);
 });
+
+
+test('old dashboards reclassify event items without fetching prices or discarding histories',async()=>{
+  const data=fixture(),eventId='67586bee39b1b82b0d0f9d06';
+  data.items[eventId]={...data.items[id],id:eventId,eventOnly:false,excluded:false};
+  const ready=makeDashboard(data,{entries:{}},{records:[]});
+  delete ready.snapshot.eventMetadataVersion;ready.snapshot.items[eventId].eventOnly=false;
+  const store=memoryStore(new Map([['dashboard/pve.json',ready],['snapshot/pve.json',data]]));
+  const result=await dashboard(store,'pve');
+  assert.equal(result.snapshot.items[eventId].eventOnly,true);
+  assert.equal(result.modelVersion,MODEL_VERSION);assert.equal(result.snapshot.fetchedAt,data.fetchedAt);
+  assert.equal(Object.keys(result.snapshot.items).length,2);
+});
