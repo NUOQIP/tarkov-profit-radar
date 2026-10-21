@@ -1,11 +1,11 @@
-import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
+import { MARKETS,CATEGORIES,applyEventMetadata,collectLoot,collectCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,SCAVENGING_SELECTION_VERSION,migrateScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
 import { quicklookLayout,opportunityTone } from '/quicklook.js';
 import { PAGES,moduleForPage,resolvePage,migrateWorkspaceViews,supportsSurgeFilter } from '/navigation.mjs';
 import { itemRarity,lootPriority,compareLootPriority,qualifiesForRun,PRIORITY_WEIGHTS } from '/loot-priority.mjs';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const KEY='loot-radar-v2',params=new URLSearchParams(location.search);
-const QUICKLOOK_PRESETS={keys:{types:['keys']},mods:{types:['mods']}};
+const QUICKLOOK_PRESETS={keys:{types:['keys']},mods:{types:['mods']},ammo:{types:['ammoBox']}};
 const matchesQuicklookPreset=(v,p)=>v.quicklookTypes.length===p.types.length&&p.types.every(k=>v.quicklookTypes.includes(k));
 const UI_REVISION=7;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -32,6 +32,7 @@ const paths={
 const solidIcons={
  'preset-keys':'<path fill-rule="evenodd" d="M8 3a7 7 0 1 0 6.3 10H18v3h3v-3h2V8h-8.7A7 7 0 0 0 8 3Zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>',
  'preset-mods':'<path d="M1 9h7l2-2h10v1h7V6h2v2h3v3H22l-2 2 2 6-3 1-3-7h-2l-1 5h-3l1-6H8l-5 4H1v-4l2-1Z"/><path d="M11 5h6v1h-6Z"/>',
+ 'preset-ammo':'<path d="M7 1 4 5v4h6V5ZM4 10h6v9H4Zm-1 10h8v3H3ZM17 5l-3 4v4h6V9Zm-3 9h6v5h-6Zm-1 6h8v3h-8Z"/>',
  refresh:'<path d="M4.2 7.5a9 9 0 0 1 14.16-1.86L20 4v7h-7l3.45-3.45a6.3 6.3 0 0 0-9.91 1.3ZM19.8 16.5a9 9 0 0 1-14.16 1.86L4 20v-7h7l-3.45 3.45a6.3 6.3 0 0 0 9.91-1.3Z"/>',
  'nav-loot':'<path d="M11 5H3L1 7v4l2 2h5v3H1v3h8l2-2v-5l-2-2H4V8h7Zm12 0h-8l-2 2v10l2 2h8v-3h-7V8h7Z"/><path fill-rule="evenodd" d="M28 5h6l4 14h-3l-.9-3H28l-.9 3h-3Zm.9 8h4.3L31 7.5Z"/><path d="M39 5h3l3 10 3-10h3l-4 14h-4ZM1 2h12v1H1Zm37 19h13v1H38Z"/>',
  'nav-flips':'<path d="m16 1 7 6-7 6V9H3V5h13ZM8 11v4h13v4H8v4l-7-6Z"/>',
@@ -48,14 +49,12 @@ const safeIds=value=>Array.isArray(value)?value.filter(x=>/^[0-9a-f]{24}$/.test(
 function safeView(v={}){
   if(!v||typeof v!=='object')v={};
   const c=v.criteria||{},n=x=>Number.isFinite(Number(x))?Math.max(0,Math.min(1e10,Number(x))):0;
-  const quicklookTypes=normalizeScavengingCategories(v.quicklookTypes);
-  // Upgrade the previous default once, preserving custom selections and later opt-outs.
-  if(!v.quicklookTypesRevision&&quicklookTypes.length===5&&['barter','food','intelligence','ammoBox','medical'].every(k=>quicklookTypes.includes(k)))quicklookTypes.push('poster');
+  const quicklookTypes=migrateScavengingCategories(v.quicklookTypes,v.quicklookTypesRevision);
   return {category:Object.hasOwn(CATEGORIES,v.category)?v.category:'all',filter:['short','favorites'].includes(v.filter)?v.filter:'all',
     search:typeof v.search==='string'?v.search.slice(0,200):'',
     includeEvents:v.includeEvents===true,
     quicklookView:v.quicklookView==='list'?'list':'cloud',station:typeof v.station==='string'?v.station:'all',
-    quicklookTypes,quicklookTypesRevision:1,
+    quicklookTypes,quicklookTypesRevision:SCAVENGING_SELECTION_VERSION,
     criteria:{minSlot:n(c.minSlot),minProfit:n(c.minProfit),budget:n(c.budget),maxHours:n(c.maxHours),onlyExecutable:c.onlyExecutable===true,freshOnly:c.freshOnly===true}};
 }
 const state={
@@ -127,8 +126,8 @@ function switchPage(page){
 function syncWorkspace(){
   const page=state.page,mod=moduleForPage(page);
   document.body.dataset.page=page;
-  const titles={items:['01','物品一览','单件净利 ↓'],run:['02','跑刀速览','拾取优先级 ↓'],flips:['03','商人倒货','单次净利 ↓'],crafts:['04','藏身处制作','每批净利 ↓']};
-  $('#page-number').textContent=titles[page][0];$('#page-title').textContent=titles[page][1];$('#sort-indicator').textContent=titles[page][2];
+  const titles={items:['01','物品一览',''],run:['02','跑刀速览','拾取优先级 ↓'],flips:['03','商人倒货','单次净利 ↓'],crafts:['04','藏身处制作','']};
+  $('#page-number').textContent=titles[page][0];$('#page-title').textContent=titles[page][1];$('#sort-indicator').textContent=titles[page][2];$('#sort-indicator').hidden=!titles[page][2];
   $$('[data-page-count]').forEach(el=>el.hidden=el.dataset.pageCount!==mod);
   $('#station-filter-label').hidden=page!=='crafts';
   $('#surge-filter').hidden=!supportsSurgeFilter(page);

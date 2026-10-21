@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { DEFAULT_SCAVENGING_CATEGORIES, SCAVENGING_SELECTION_VERSION, migrateScavengingCategories } from './model.mjs';
 import { applyEventMetadata, EVENT_METADATA_VERSION, fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, isPriceOpportunity, summarizeHistory, analyzeHistorySummary, mergeRecentQuotes, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
@@ -325,13 +326,13 @@ test('a seven-day rise remains red after a plateau and does not require thirty d
   assert.equal(analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now).short,false);
 });
 
-test('quicklook defaults include six loot types and keep all catalog items',()=>{
+test('quicklook defaults include five loot types while ammo boxes remain separately selectable',()=>{
   const objects=[item('mod',{category:'mods'}),item('food',{category:'food'}),item('barter',{category:'barter'}),
     item('intel',{category:'barter'}),item('intel-other',{category:'other',name:'情报文件夹'}),
     item('poster',{category:'other',name:'情报海报',types:['poster']}),item('medical',{category:'medical'}),
     item('ammo-box',{category:'ammo',types:['ammoBox']}),item('ammo',{category:'ammo',types:['ammo']}),item('document',{category:'other',name:'普通文件'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
   const rows=collectLoot(dataset(objects),{},now);
-  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['ammo-box','barter','food','intel','intel-other','medical','poster']);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['barter','food','intel','intel-other','medical','poster']);
   for(const id of ['mod','poster','medical','key','gun'])assert.equal(rows.some(r=>r.id===id),true);
   assert.equal(isScavengingItem({category:'barter',isPreset:true}),false);
   assert.equal(isScavengingItem({category:'weapon',isPreset:true,default:true},['weapon']),true);
@@ -346,6 +347,7 @@ test('quicklook defaults include six loot types and keep all catalog items',()=>
   assert.ok(excluded.every(i=>!isScavengingItem(i,Object.keys(SCAVENGING_CATEGORIES))));
   assert.equal(isScavengingItem(objects.find(i=>i.id==='mod'),['mods']),true);
   assert.equal(isScavengingItem(objects.find(i=>i.id==='ammo'),['ammoBox']),false);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item,['ammoBox'])).map(r=>r.id),['ammo-box']);
   assert.equal(isScavengingItem(objects.find(i=>i.id==='ammo-box'),['ammo']),false);
   assert.equal(isScavengingItem(objects.find(i=>i.id==='medical'),[]),false);
   assert.equal(scavengingCategory(item('flash-drive',{category:'barter',sourceCategories:['5448ecbe4bdc2d60728b4568']})),'intelligence');
@@ -354,6 +356,20 @@ test('quicklook defaults include six loot types and keep all catalog items',()=>
   assert.equal(collectCatalog(dataset(excluded),{},now).length,excluded.length);
   // Special-slot support alone is not the special-items category: paracord remains loot.
   assert.equal(isScavengingItem(item('paracord',{category:'barter',types:['barter','specialSlot'],sourceCategories:['590c745b86f7743cc433c5f2']})),true);
+});
+
+test('default-category migration removes ammo boxes once while preserving custom choices',()=>{
+  const oldFive=['barter','food','intelligence','ammoBox','medical'],oldSix=[...oldFive,'poster'];
+  assert.deepEqual(migrateScavengingCategories(),DEFAULT_SCAVENGING_CATEGORIES);
+  for(const [selected,revision] of [[oldFive,0],[oldSix,0],[oldSix,1]]){
+    const original=[...selected],upgraded=migrateScavengingCategories(selected,revision);
+    assert.deepEqual(upgraded,DEFAULT_SCAVENGING_CATEGORIES);
+    assert.deepEqual(migrateScavengingCategories(upgraded,SCAVENGING_SELECTION_VERSION),upgraded);
+    assert.deepEqual(selected,original);
+  }
+  for(const selected of [[],['ammoBox'],['keys'],['medical','ammoBox']])assert.deepEqual(migrateScavengingCategories(selected,1),selected);
+  assert.deepEqual(migrateScavengingCategories(oldFive,1),oldFive);
+  assert.deepEqual(migrateScavengingCategories(oldSix,SCAVENGING_SELECTION_VERSION),oldSix);
 });
 
 test('long-term value needs 24 complete valid days and cannot be created from one day',()=>{
