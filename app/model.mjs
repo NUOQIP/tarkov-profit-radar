@@ -197,6 +197,10 @@ export function isShortOpportunity(row, trend) {
   return Boolean(trend?.short && row.status!=='报价延迟' &&
     (row.kind==='loot' ? row.channel==='跳蚤' && positive(row.fleaNet) : positive(row.profit)));
 }
+export function isPriceOpportunity(row, trend) {
+  return Boolean((trend?.short || trend?.watch) && ['可参考','报价延迟'].includes(row.status) &&
+    (row.kind==='loot' ? row.channel==='跳蚤' && positive(row.fleaNet) : positive(row.profit)));
+}
 export function quoteStatus(i, data, options = {}, now = Date.now()) {
   if (!data.flea.enabled || i.types.includes('noFlea')) return '禁售';
   if (!options.maxProgress && options.playerLevel && options.playerLevel < i.fleaLevel) return '等级不足';
@@ -404,35 +408,64 @@ function cleanHistory(points,item,now) {
   return [...new Map([...(points||[]),current].filter(p=>positive(p.priceMin)&&Number.isFinite(p.timestamp)&&p.timestamp<=now+60000)
     .map(p=>[p.timestamp,p])).values()].sort((a,b)=>a.timestamp-b.timestamp);
 }
+// Keep original scan times, never fetch times. Older observations are thinned to
+// one real scan per hour (15 minutes for the latest 6h), bounding the wire payload.
+export function mergeRecentQuotes(recent,item,now=Date.now()) {
+  const current=[Date.parse(item.scan),item.price,item.offers];
+  // Legacy two-column summaries had already excluded scans with fewer than 3
+  // offers. Unknown counts in new raw observations are not treated as evidence.
+  const scans=[...new Map([...(recent||[]),current].map(p=>[p[0],p[1],p.length===2?3:p[2]]).filter(([time,price,offers])=>
+    Number.isFinite(time)&&time>=now-36*FRESH_MS&&time<=now+60000&&positive(price)&&offers>=3)
+    .map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]);
+  const buckets=new Map();
+  for(const p of scans){const period=p[0]>=now-6*FRESH_MS?15*60000:FRESH_MS;buckets.set(`${period}:${Math.floor(p[0]/period)}`,p);}
+  return [...buckets.values()].sort((a,b)=>a[0]-b[0]);
+}
 // Price-only evidence: user-specific fees are still calculated on the device.
 export function summarizeHistory(points,item,now=Date.now()) {
   const day=86400000,clean=cleanHistory(points,item,now),completeDay=Math.floor(now/day)*day;
-  const baselineRows=clean.filter(p=>p.timestamp>=now-8*day&&p.timestamp<now-day&&p.offerCount>=3);
-  const referenceRows=baselineRows.filter(p=>p.timestamp<now-6*day),daily=new Map();
+  const daily=new Map();
   for(const p of clean)if(p.timestamp>=completeDay-30*day&&p.timestamp<completeDay&&p.offerCount>=3){
     const k=Math.floor(p.timestamp/day);if(!daily.has(k))daily.set(k,[]);daily.get(k).push(p.priceMin);
   }
-  return {at:now,baseline:median(baselineRows.map(p=>p.priceMin)),days:new Set(baselineRows.map(p=>Math.floor(p.timestamp/day))).size,
-    reference7:median(referenceRows.map(p=>p.priceMin)),referenceCount:referenceRows.length,
-    priorDay:median(clean.filter(p=>p.timestamp>=now-30*3600000&&p.timestamp<=now-18*3600000).map(p=>p.priceMin)),
-    recent:clean.filter(p=>p.timestamp>=now-4*FRESH_MS&&p.offerCount>=3).map(p=>[p.timestamp,p.priceMin]),
+  return {version:3,at:now,
+    recent:mergeRecentQuotes(clean.map(p=>[p.timestamp,p.priceMin,p.offerCount]),item,now),
     daily:[...daily].map(([date,prices])=>[date,median(prices)])};
 }
 export function analyzeHistorySummary(summary,item,data,options={},now=Date.now()) {
-  const day=86400000,{baseline:base,priorDay,reference7,referenceCount,days}=summary;
-  const current=positive(item.price)&&item.offers>=3&&Date.parse(item.scan)<=now+60000?[[Date.parse(item.scan),item.price]]:[];
-  const recent=[...new Map([...(summary.recent||[]),...current]).entries()].filter(([t])=>t>=now-4*FRESH_MS&&t<=now+60000).sort((a,b)=>a[0]-b[0]);
-  const confirmed=recent.filter(([,price])=>reference7&&price>=reference7*1.2);
-  const independent=confirmed.length>=2&&confirmed.at(-1)[0]-confirmed[0][0]>=15*60000;
-  const evidenceFresh=now-summary.at<=FRESH_MS,change7=reference7?item.price/reference7-1:null;
-  let short=false,extraNet=null;
-  if(evidenceFresh&&days>=6&&referenceCount>=2&&independent&&item.offers>=3&&quoteStatus(item,data,options,now)==='可参考'){
-    const baseFee=fleaFee(feeBasePrice(item,data),reference7,data.flea,options.intelligence||0,options.management||0);
-    const currentFee=fleaFee(feeBasePrice(item,data),item.price,data.flea,options.intelligence||0,options.management||0);
-    if(baseFee!==null&&currentFee!==null)extraNet=(item.price-currentFee)-(reference7-baseFee);
-    short=extraNet!==null&&change7>=.2&&extraNet>0&&extraNet>=Math.max(0,reference7-baseFee)*.1&&recent.slice(-2).every(([,price])=>price>=reference7*1.2);
+  const day=86400000,today=Math.floor(now/day),recent=mergeRecentQuotes(summary.recent,item,now);
+  const daily=(summary.daily||[]).filter(([date,price])=>date>=today-7&&date<today&&positive(price));
+  const weekly=daily.map(([,price])=>price).sort((a,b)=>a-b),base=median(weekly),days=weekly.length;
+  const hourly=new Map();
+  for(const [time,price] of recent)if(time>=now-30*FRESH_MS&&time<=now-6*FRESH_MS){
+    const key=Math.floor(time/FRESH_MS);if(!hourly.has(key))hourly.set(key,[]);hourly.get(key).push(price);
   }
-  const stackCount=options.stack==='full'?(item.stack||1):1,today=Math.floor(now/day);
+  const hours=[...hourly.keys()].sort((a,b)=>a-b),dayPrices=[...hourly.values()].map(median).sort((a,b)=>a-b),priorDay=median(dayPrices);
+  const change7=base?item.price/base-1:null,change24=priorDay?item.price/priorDay-1:null;
+  const feeAt=price=>fleaFee(feeBasePrice(item,data),price,data.flea,options.intelligence||0,options.management||0);
+  const fee=feeAt(item.price),currentNet=fee===null?null:item.price-fee;
+  const traderFloor=Math.max(0,...(item.sell||[]).map(b=>b.priceRUB||0));
+  const status=quoteStatus(item,data,{...options,allowDelayed:true},now),validQuote=['可参考','报价延迟'].includes(status)&&item.offers>=3;
+  const windows=[
+    {window:'7d',baseline:base,change:change7,prices:weekly,threshold:.15,covered:days>=3&&daily.some(([date])=>date>=today-2)&&now-summary.at<=day},
+    {window:'24h',baseline:priorDay,change:change24,prices:dayPrices,threshold:.2,
+      covered:hours.length>=6&&hours.at(-1)-hours[0]>=12&&hours[0]*FRESH_MS<=now-18*FRESH_MS&&hours.at(-1)*FRESH_MS>=now-12*FRESH_MS}
+  ];
+  const candidates=windows.flatMap(w=>{
+    if(!w.covered||!validQuote||w.change<w.threshold||currentNet===null)return [];
+    const baseFee=feeAt(w.baseline);if(baseFee===null)return [];
+    const baseNet=Math.max(w.baseline-baseFee,traderFloor),extraNet=currentNet-baseNet;
+    const highPrice=Math.max(w.baseline*(1+w.threshold),w.prices[Math.floor((w.prices.length-1)*.75)]);
+    if(item.price<highPrice||extraNet<Math.max(1,baseNet*.1))return [];
+    const latest=recent.filter(([t])=>t>=now-6*FRESH_MS),high=latest.filter(([,p,n])=>p>=highPrice&&n>=3);
+    const independent=high.length>=2&&high.at(-1)[0]-high[0][0]>=15*60000;
+    const confirmed=status==='可参考'&&item.offers>=10&&independent&&latest.slice(-2).every(([,p,n])=>p>=highPrice&&n>=3);
+    return [{...w,extraNet,confirmed}];
+  }).sort((a,b)=>Number(b.confirmed)-Number(a.confirmed)||b.extraNet-a.extraNet);
+  const rise=candidates[0],short=Boolean(rise?.confirmed),watch=Boolean(rise&&!short);
+  const reason=short?'高价已由独立报价复核':watch?(item.offers<10?'报价较少，等待复核':status==='报价延迟'?'等待新报价复核':'等待第二次高价复核'):
+    days<3&&hours.length<6?'历史覆盖不足':'当前未明显高于近期常态';
+  const stackCount=options.stack==='full'?(item.stack||1):1;
   const historicalSlots=(summary.daily||[]).filter(([date])=>date>=today-30&&date<today).map(([,price])=>{
     const fee=fleaFee(feeBasePrice(item,data),price,data.flea,options.intelligence||0,options.management||0,stackCount);
     return fee===null?null:(price*stackCount-fee)/(item.width*item.height);
@@ -442,8 +475,8 @@ export function analyzeHistorySummary(summary,item,data,options={},now=Date.now(
   const currentSlot=currentFee===null?0:(item.price*stackCount-currentFee)/(item.width*item.height);
   const long=historicalSlots.length>=24&&stableDays/historicalSlots.length>=.8&&lowerQuartile>=LONG_TERM_SLOT_MIN&&currentSlot>=LONG_TERM_SLOT_MIN&&
     ['可参考','报价延迟'].includes(quoteStatus(item,data,{...options,allowDelayed:true},now))&&!item.excluded;
-  return {short,long,baseline:base,premium:base?item.price/base-1:null,reference7,change7,extraNet,priorDay,change24:priorDay?item.price/priorDay-1:null,days,confirmations:recent.length,
-    reason:days<6||referenceCount<2?'7日历史覆盖不足':!independent?'尚无两个间隔15分钟的近期高价快照':short?'比约7日前涨价至少20%，税后增收已确认':'未满足7日急涨条件',
+  return {short,watch,long,baseline:base,premium:change7,reference7:base,change7,extraNet:rise?.extraNet??null,priorDay,change24,days,confirmations:recent.filter(([t])=>t>=now-6*FRESH_MS).length,
+    riseWindow:rise?.window??null,riseBaseline:rise?.baseline??null,riseChange:rise?.change??null,reason,
     longDays:historicalSlots.length,lowerQuartile,longMedian:median(historicalSlots),
     longReason:long?'30日价格按现行费率回算：至少24日有效，至少80%日期每格净值达到3万。不是历史实际成交利润。':`30日高值观察 ${historicalSlots.length}/30 天；当前尚未满足每格3万的稳定高值条件。`,points:[]};
 }

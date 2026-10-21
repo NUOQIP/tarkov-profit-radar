@@ -1,6 +1,6 @@
-import { MODEL_VERSION, summarizeHistory } from './model.mjs';
+import { MODEL_VERSION, summarizeHistory, mergeRecentQuotes } from './model.mjs';
 
-export const DASHBOARD_VERSION = 1;
+export const DASHBOARD_VERSION = 2;
 // Keep all source items; omit fields and lower trader bids the UI never uses.
 export function compactSnapshot(data) {
   const items=Object.fromEntries(Object.entries(data.items).map(([id,item])=>{
@@ -18,9 +18,9 @@ export function compactSignals(book,data,now=Date.now()) {
   for(const [id,entry] of Object.entries(book?.entries||{})){
     if(!data.items[id]||now-entry.at>2*86400000)continue;
     const summary=entry.summary||(entry.points?summarizeHistory(entry.points,data.items[id],now):null);
-    if(summary)entries[id]={at:entry.at,summary};
+    if(summary)entries[id]={at:entry.at,summary:{version:3,at:entry.at,daily:summary.daily||[],recent:mergeRecentQuotes(summary.recent,data.items[id],now)}};
   }
-  return {version:2,entries,checkedAt:book?.checkedAt||null,checked:Object.keys(entries).length,total:book?.total||0};
+  return {version:3,entries,checkedAt:book?.checkedAt||null,checked:Object.keys(entries).length,total:book?.total||0};
 }
 
 export function makeDashboard(data,book,ledger,now=Date.now()) {

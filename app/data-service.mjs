@@ -1,4 +1,4 @@
-import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, isScavengingItem, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
+import { MARKETS, MODEL_VERSION, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
 import { DASHBOARD_VERSION, compactSignals, makeDashboard } from './dashboard.mjs';
 const MINUTE=60000, DAY=86400000;
 const cache=new class extends Map{
@@ -132,19 +132,37 @@ export async function history(store,market,id) {
 export async function scanSignals(store,data,limit=12) {
   const key=`signals/${data.market}.json`,memoryKey=keyFor(store,key);
   return once(store,memoryKey,async()=>{
-    const book=compactSignals(await store.read(key),data);
+    const [stored,scanState]=await Promise.all([store.read(key),store.read(`signal-scan/${data.market}.json`)]);
+    const now=Date.now(),book=compactSignals(stored,data,now),attempts=scanState?.attempts||{};
     const candidates=collectLoot(data,{includeEvents:true}).filter(r=>['可参考','报价延迟'].includes(r.status)&&(r.slotValue>=20000||r.item.change48>=10));
-    const rising=[...candidates].filter(r=>r.status==='可参考'&&r.item.change48>=10).sort((a,b)=>b.item.change48-a.item.change48);
-    const priority=[...rising.slice(0,4),...candidates.filter(r=>isScavengingItem(r.item)).slice(0,4),...candidates.slice(0,2)];
-    const freshNeeded=r=>!book.entries[r.item.id]||Date.now()-book.entries[r.item.id].at>60*MINUTE;
-    const unseen=[...new Map([...priority.filter(freshNeeded).slice(0,6),...candidates.filter(r=>!book.entries[r.item.id]),...rising.filter(freshNeeded),...candidates.filter(freshNeeded)].map(r=>[r.item.id,r])).values()].slice(0,limit);
-    for(let index=0;index<unseen.length;index+=6){
-      await Promise.all(unseen.slice(index,index+6).map(async r=>{
+    const eligible=candidates.filter(r=>{
+      const attempt=attempts[r.item.id],backoff=attempt?.failures?Math.min(6*60,60*2**Math.min(attempt.failures-1,3))*MINUTE:60*MINUTE;
+      return (!attempt||now-attempt.at>=backoff)&&(!book.entries[r.item.id]||now-book.entries[r.item.id].at>=60*MINUTE);
+    });
+    // Reserve capacity for old known histories as well as new items. A 48h fall
+    // must not hide a price which is still well above the weekly normal.
+    const rising=eligible.map(r=>({r,s:book.entries[r.item.id]?.summary?analyzeHistorySummary(book.entries[r.item.id].summary,r.item,data,{},now):null}))
+      .filter(({r,s})=>s?.watch||s?.short||s?.change7>=.15||s?.change24>=.2||r.item.change48>=10)
+      .sort((a,b)=>(b.s?.riseChange??b.s?.change7??b.r.item.change48/100)-(a.s?.riseChange??a.s?.change7??a.r.item.change48/100)).map(x=>x.r);
+    const oldest=(a,b)=>(attempts[a.item.id]?.at||book.entries[a.item.id]?.at||0)-(attempts[b.item.id]?.at||book.entries[b.item.id]?.at||0);
+    const known=eligible.filter(r=>book.entries[r.item.id]&&now-book.entries[r.item.id].at>=12*60*MINUTE).sort(oldest);
+    const unseen=eligible.filter(r=>!book.entries[r.item.id]).sort(oldest);
+    const fair=[];for(let n=0;n<Math.max(known.length,unseen.length);n++){if(known[n])fair.push(known[n]);if(unseen[n])fair.push(unseen[n]);}
+    const selected=[...new Map([...rising.slice(0,Math.floor(limit/2)),...fair,...rising].map(r=>[r.item.id,r])).values()].slice(0,limit);
+    for(let index=0;index<selected.length;index+=6){
+      await Promise.all(selected.slice(index,index+6).map(async r=>{
+        const previous=attempts[r.item.id];let failed=true;
         try{
           const result=await history(store,data.market,r.item.id);
           const entry=compactSignals({entries:{[r.item.id]:result}},data).entries[r.item.id];
-          if(entry)book.entries[r.item.id]=entry;
-        }catch{ /* A missing history never produces a substitute trend. */ }
+          if(entry){
+            // The full-history source can update less often than live quotes.
+            entry.summary.recent=mergeRecentQuotes([...(book.entries[r.item.id]?.summary.recent||[]),...entry.summary.recent],r.item);
+            book.entries[r.item.id]=entry;
+          }
+          failed=Boolean(result.warning)||!result.points?.length;
+        }catch{ /* Missing evidence is never replaced with an invented trend. */ }
+        attempts[r.item.id]={at:Date.now(),failures:failed?(previous?.failures||0)+1:0};
       }));
     }
     const allowed=new Set(candidates.map(r=>r.item.id));
@@ -152,6 +170,7 @@ export async function scanSignals(store,data,limit=12) {
     book.checkedAt=new Date().toISOString();book.total=candidates.length;
     book.checked=candidates.filter(r=>book.entries[r.item.id]).length;
     await store.write(key,book);
+    await store.write(`signal-scan/${data.market}.json`,{attempts:Object.fromEntries(Object.entries(attempts).filter(([id,a])=>data.items[id]&&now-a.at<7*DAY))});
     return { ...book, entries:Object.fromEntries(Object.entries(book.entries).filter(([id])=>allowed.has(id))) };
   });
 }

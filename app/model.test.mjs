@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
+import { fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, isPriceOpportunity, summarizeHistory, analyzeHistorySummary, mergeRecentQuotes, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
 const item = (id, patch = {}) => ({
@@ -300,7 +300,7 @@ test('craft ranking prioritizes money per batch even when a shorter recipe earns
 });
 
 test('a seven-day rise remains red after a plateau and does not require thirty days of history',()=>{
-  const i=item('junk',{price:15000,average:15000,basePrice:10000}),data=dataset([i]);
+  const i=item('junk',{price:15000,average:15000,basePrice:10000,sell:[]}),data=dataset([i]);
   const points=Array.from({length:7},(_,n)=>({priceMin:n<3?15000:10000,timestamp:now-(n+1.5)*86400000,offerCount:10}));
   points.push({priceMin:15000,timestamp:now-86400000,offerCount:10},{priceMin:15000,timestamp:now-3600000,offerCount:10});
   const s=analyzeHistory(points,i,data,{},now);
@@ -394,4 +394,75 @@ test('no paired history means no fabricated long-term trade profit',()=>{
   const i=item('a',{buy:[{trader:'t',priceRUB:10000,currency:'RUB',minTraderLevel:1}]}),data=dataset([i]);
   const [row]=collectFlips(data,{},now);
   assert.equal(profitStability([],row,data,{}).long,false);
+});
+
+const historyWeek=price=>Array.from({length:7},(_,n)=>({priceMin:price,timestamp:now-(n+1)*86400000,offerCount:12}));
+test('the weekly normal ignores one abnormal day and gives each day equal weight',()=>{
+  const i=item('normal',{price:150000,average:150000}),data=dataset([i]);
+  const points=historyWeek(150000);points[6].priceMin=50000;
+  for(let n=0;n<200;n++)points.push({...points[6],timestamp:points[6].timestamp+n*1000});
+  const s=analyzeHistory(points,i,data,{},now);
+  assert.equal(s.baseline,150000);assert.equal(s.short,false);assert.equal(s.watch,false);
+});
+test('a 24h spike is found even when the earlier weekly market was more expensive',()=>{
+  const i=item('rebound',{price:150000,average:125000}),data=dataset([i]);
+  const points=historyWeek(200000);
+  for(let hours=6;hours<=30;hours+=2)points.push({priceMin:100000,timestamp:now-hours*3600000,offerCount:12});
+  points.push({priceMin:150000,timestamp:now-3600000,offerCount:12});
+  const s=analyzeHistory(points,i,data,{},now);
+  assert.equal(s.short,true);assert.equal(s.riseWindow,'24h');assert.equal(s.riseBaseline,100000);assert.ok(s.extraNet>0);
+  assert.ok(s.change7<0);
+});
+test('one new elevated scan is visible as a lead but only independent scans confirm it',()=>{
+  const i=item('new-rise',{price:125000,average:110000}),data=dataset([i]),points=historyWeek(100000);
+  const s=analyzeHistory(points,i,data,{},now),[row]=collectLoot(data,{},now);
+  assert.equal(s.short,false);assert.equal(s.watch,true);assert.equal(isPriceOpportunity(row,s),true);assert.equal(isShortOpportunity(row,s),false);
+  assert.equal(s.extraNet,125000-fleaFee(100000,125000,flea)-90000);
+  const summary=summarizeHistory(points,i,now);
+  for(let n=0;n<10;n++)summary.recent=mergeRecentQuotes(summary.recent,i,now+n*60000);
+  assert.equal(analyzeHistorySummary(summary,i,data,{},now+10*60000).short,false);
+  const later={...i,scan:new Date(now+20*60000).toISOString()};
+  assert.equal(analyzeHistorySummary(summary,later,data,{},now+20*60000).short,true);
+});
+test('low offers and delayed quotes remain unconfirmed, and expired quotes are not opportunities',()=>{
+  const i=item('rise',{price:150000,average:150000}),data=dataset([i]);
+  const points=[...historyWeek(100000),{priceMin:150000,timestamp:now-3*3600000,offerCount:12}];
+  for(const offers of [3,9]){const s=analyzeHistory(points,{...i,offers},data,{},now);assert.equal(s.short,false);assert.equal(s.watch,true);}
+  for(const offers of [0,1,2])assert.equal(analyzeHistory(points,{...i,offers},data,{},now).watch,false);
+  const delayed=analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now);
+  assert.equal(delayed.short,false);assert.equal(delayed.watch,true);
+  const expired=analyzeHistory(points,{...i,scan:new Date(now-7*3600000).toISOString()},data,{},now);
+  assert.equal(expired.short,false);assert.equal(expired.watch,false);
+});
+test('a live rise can use a cached daily baseline without pretending the history was refreshed',()=>{
+  const i=item('rise',{price:150000,average:150000}),data=dataset([i]);
+  const summary=summarizeHistory([...historyWeek(100000),{priceMin:150000,timestamp:now-3600000,offerCount:12}],i,now);
+  summary.at=now-18*3600000;
+  assert.equal(analyzeHistorySummary(summary,i,data,{},now).short,true);
+  summary.at=now-25*3600000;
+  assert.equal(analyzeHistorySummary(summary,i,data,{},now).short,false);
+});
+test('taxes and the trader floor must leave real additional proceeds; loss-making routes stay out of both states',()=>{
+  const i=item('rise',{price:150000,average:150000,sell:[{trader:'t',priceRUB:145000}]}),data=dataset([i]);
+  const points=[...historyWeek(100000),{priceMin:150000,timestamp:now-3600000,offerCount:12}];
+  const s=analyzeHistory(points,i,data,{},now);assert.equal(s.short,false);assert.equal(s.watch,false);
+  for(const kind of ['flip','craft'])for(const profit of [-1,0,null]){
+    assert.equal(isPriceOpportunity({kind,profit,status:'可参考'},{watch:true}),false);
+    assert.equal(isPriceOpportunity({kind,profit,status:'可参考'},{short:true}),false);
+  }
+});
+test('unknown observation depth cannot confirm a spike, and live history stays bounded',()=>{
+  const i=item('rise',{price:150000,average:150000}),data=dataset([i]);
+  const points=[...historyWeek(100000),{priceMin:150000,timestamp:now-3600000}];
+  assert.equal(analyzeHistory(points,i,data,{},now).short,false);
+  const dense=Array.from({length:36*60},(_,n)=>[now-n*60000,150000,12]);
+  const recent=mergeRecentQuotes(dense,i,now);
+  assert.ok(recent.length<=57);assert.ok(recent.every(p=>dense.some(d=>d[0]===p[0])));
+});
+test('small per-round increases remain useful to batch sellers without inventing full-stack profit',()=>{
+  const i=item('ammo',{price:1500,average:1500,basePrice:1000,stack:60,sell:[],types:['ammo']}),data=dataset([i]);
+  const points=[...historyWeek(1000),{priceMin:1500,timestamp:now-3600000,offerCount:12}];
+  const s=analyzeHistory(points,i,data,{},now);
+  assert.equal(s.short,true);assert.ok(s.extraNet>0&&s.extraNet<1000);
+  assert.equal(s.extraNet,1500-fleaFee(1000,1500,flea)-900);
 });

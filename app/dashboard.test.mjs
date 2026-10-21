@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleApi,dashboard,scanSignals } from './data-service.mjs';
-import { compactSnapshot,makeDashboard } from './dashboard.mjs';
-import { MODEL_VERSION,sale,analyzeHistorySummary } from './model.mjs';
+import { compactSnapshot,compactSignals,makeDashboard } from './dashboard.mjs';
+import { MODEL_VERSION,sale,summarizeHistory,analyzeHistorySummary } from './model.mjs';
 const now=Date.now(),id='0123456789abcdef01234567';
 function fixture(market='pve'){
   return {version:2,modelVersion:MODEL_VERSION,market,fetchedAt:new Date(now).toISOString(),rawCount:1,
@@ -61,9 +61,48 @@ test('a warm reader sees a dashboard published by another server after the cache
   t.mock.method(Date,'now',()=>now+31000);
   assert.equal((await dashboard(store,'pve')).preparedAt,next.preparedAt);
 });
-test('expired short-term evidence cannot keep a red tag while current quotes change',()=>{
+test('an old summary without covered daily or hourly history cannot keep a red tag',()=>{
   const data=fixture(),summary={at:now-7200000,baseline:100000,days:7,reference7:100000,referenceCount:7,priorDay:100000,recent:[[now-1200000,150000],[now-100000,150000]],daily:[]};
   assert.equal(analyzeHistorySummary(summary,data.items[id],data,{intelligence:3},now).short,false);
+});
+
+test('live scans accumulate without extending the age of the cached daily history',()=>{
+  const data=fixture(),points=Array.from({length:7},(_,n)=>({priceMin:100000,offerCount:12,timestamp:now-(n+1)*86400000}));
+  const at=now-18*3600000;
+  let book=compactSignals({entries:{[id]:{at,summary:summarizeHistory(points,data.items[id],now)}}},data,now);
+  data.items[id].scan=new Date(now+20*60000).toISOString();
+  book=compactSignals(book,data,now+20*60000);
+  assert.equal(book.entries[id].at,at);assert.equal(book.entries[id].summary.at,at);
+  assert.equal(analyzeHistorySummary(book.entries[id].summary,data.items[id],data,{},now+20*60000).short,true);
+  assert.equal(book.entries[id].summary.recent.filter(p=>p[0]>=now).length,2);
+});
+test('history scanning refreshes old known items as well as discovering new ones',async t=>{
+  t.mock.method(Date,'now',()=>now);
+  const data=fixture(),oldId='111111111111111111111111',newId='222222222222222222222222';
+  data.items[oldId]={...data.items[id],id:oldId,price:100000,average:100000,change48:-10};
+  data.items[newId]={...data.items[id],id:newId,price:100000,average:100000};
+  delete data.items[id];
+  const points=Array.from({length:7},(_,n)=>({priceMin:100000,offerCount:12,timestamp:now-(n+1)*86400000}));
+  const book={entries:{[oldId]:{at:now-18*3600000,summary:summarizeHistory(points,data.items[oldId],now)}}};
+  const store=memoryStore(new Map([['signals/pve.json',book]])),requested=[];
+  t.mock.method(globalThis,'fetch',async url=>{requested.push(String(url).split('/').at(-1));return {ok:true,json:async()=>({data:points})};});
+  const result=await scanSignals(store,data,2);
+  assert.deepEqual(requested.sort(),[oldId,newId]);assert.equal(result.entries[oldId].at,now);assert.equal(result.checked,2);
+});
+test('a weekly rise gets refreshed even with a negative 48h change, while failed fetches back off',async t=>{
+  t.mock.method(Date,'now',()=>now);
+  const data=fixture(),newId='222222222222222222222222',failedId='333333333333333333333333';
+  data.items[id].change48=-10;
+  data.items[newId]={...data.items[id],id:newId,change48:0};
+  data.items[failedId]={...data.items[id],id:failedId,change48:200};
+  const points=Array.from({length:7},(_,n)=>({priceMin:100000,offerCount:12,timestamp:now-(n+1)*86400000}));
+  const store=memoryStore(new Map([
+    ['signals/pve.json',{entries:{[id]:{at:now-3*3600000,summary:summarizeHistory(points,data.items[id],now)}}}],
+    ['signal-scan/pve.json',{attempts:{[failedId]:{at:now-10*60000,failures:2}}}]
+  ])),requested=[];
+  t.mock.method(globalThis,'fetch',async url=>{requested.push(String(url).split('/').at(-1));return {ok:true,json:async()=>({data:points})};});
+  await scanSignals(store,data,2);
+  assert.deepEqual(requested,[id,newId]);
 });
 test('the deferred QQ feed is not a public API',async()=>{
   assert.equal((await handleApi(new Request('http://test/api/feed'),memoryStore())).status,404);
