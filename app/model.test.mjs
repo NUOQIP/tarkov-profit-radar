@@ -206,6 +206,22 @@ test('crafts account for output quantity and reusable tools while ignoring legac
   const [without]=collectCrafts(data,{},now);assert.equal(without.fuel,0);assert.equal(without.margin,150000);
   const [withFuel]=collectCrafts(data,{fuelPerHour:10000},now);assert.equal(withFuel.profit,150000);assert.equal(withFuel.hourly,75000);
 });
+test('reusable tools remain a separate purchase reference without an ownership gate',()=>{
+  const task='0123456789abcdef01234567',toolId='123456789abcdef0123456789';
+  const data=dataset([item('product'),item('material',{price:10000,average:10000}),item(toolId,{price:50000,average:50000})],{
+    stations:{s:{id:'s',name:'工作台'}},
+    crafts:[{id:'c',station:'s',duration:7200,level:1,taskUnlock:task,productItem:{item:'product',count:2},requiredItems:[{item:'material',count:3},{item:toolId,count:1,attributes:{tool:true}}]}]
+  });
+  const options={playerLevel:79,stationLevels:{s:1},completedTasks:[task],onlyExecutable:true};
+  const [row]=collectCrafts(data,options,now);
+  assert.ok(row.execution.executable);
+  assert.equal(row.purchase,30000);assert.equal(row.profit,150000);
+  assert.equal(row.recipe.find(m=>m.tool).capital,50000);
+  const [legacy]=collectCrafts(data,{...options,ownedTools:[toolId]},now);
+  assert.equal(legacy.profit,row.profit);
+  assert.equal(legacy.recipe.find(m=>m.tool).capital,50000);
+  assert.equal(collectCrafts(data,{...options,completedTasks:[]},now).length,0);
+});
 test('high price and single repeated timestamp cannot independently trigger short-term classification',()=>{
   const i=item('expensive',{price:160000,average:150000}),data=dataset([i]);
   const points=Array.from({length:7},(_,n)=>({priceMin:100000,timestamp:now-(n+1.5)*86400000,offerCount:10}));

@@ -33,7 +33,6 @@ export function normalizeProfile(input = {}) {
     management:number(input.management,0,51,0), fuelPerHour:0,
     traderLevels:levels(input.traderLevels,4), stationLevels:levels(input.stationLevels,10), stationFuel:levels(input.stationFuel,10000000),
     completedTasks:(Array.isArray(input.completedTasks)?input.completedTasks:[]).filter(x=>/^[0-9a-f]{24}$/.test(x)),
-    ownedTools:(Array.isArray(input.ownedTools)?input.ownedTools:[]).filter(x=>/^[0-9a-f]{24}$/.test(x)),
     excludedStations:(Array.isArray(input.excludedStations)?input.excludedStations:[]).filter(x=>/^[a-z0-9-]{1,64}$/i.test(x)),
     edition:typeof input.edition==='string'?input.edition:'',
     materialMode:input.materialMode==='owned'?'owned':'buy', onlyExecutable:input.onlyExecutable===true, includeEvents:input.includeEvents===true,
@@ -298,7 +297,7 @@ function materials(reqs, data, options, now) {
     // Level-specific dogtags, functional assemblies, etc. need a state-aware quote.
     if (Object.keys(attr).some(k => k !== 'tool')) return null;
     const buy = procurement(item,data,options,now);
-    if (attr.tool) { result.push({ ...r, item, tool: true, cost: 0, capital:options.ownedTools?.includes(item.id)?0:buy?.cost ?? null, source:buy?.source }); continue; }
+    if (attr.tool) { result.push({ ...r, item, tool: true, cost: 0, capital:buy?.cost ?? null, source:buy?.source }); continue; }
     const owned = options.materialMode==='owned' ? sale(item,data,{...options,allowDelayed:options.allowDelayedTrades===true},1,now) : null;
     const unitCost = owned ? owned.net : buy?.cost;
     if (!positive(unitCost)) return null;
@@ -318,7 +317,6 @@ export function executionStatus(row, data, options = {}) {
   if (!options.maxProgress && row.kind==='craft' && (options.stationLevels?.[row.station?.id] ?? -1) < row.level) missing.push(`${row.station?.name || '设施'} Lv.${row.level}`);
   if (!options.maxProgress && row.task && !options.completedTasks?.includes(row.task)) missing.push('任务待确认');
   if (row.editions?.length && !row.editions.includes(options.edition)) missing.push('版本资格待确认');
-  if (row.recipe?.some(m=>m.tool && !options.ownedTools?.includes(m.item.id))) missing.push('工具待确认');
   if (!options.maxProgress && row.recipe?.some(m=>m.flea && (!options.playerLevel || options.playerLevel<m.item.fleaLevel))) missing.push('材料跳蚤等级待确认');
   return { executable:missing.length===0, missing };
 }

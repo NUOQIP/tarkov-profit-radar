@@ -289,10 +289,5 @@ body[data-loading=true] .market-stage>main{visibility:hidden;pointer-events:none
 .quote-reference{display:flex;flex-wrap:wrap;gap:8px 14px;padding-top:16px;font-size:10px;color:var(--muted)}.quote-reference b{font-weight:500;color:var(--ink)}
 .detail-source{border-top:1px solid var(--line);margin-top:22px;padding-top:16px;display:flex;justify-content:space-between;gap:12px;font-size:10px;color:var(--muted)}
 .detail-source a{color:var(--accent)}
-.tag.watch-tag{color:var(--muted);border:1px dashed color-mix(in srgb,var(--gold) 45%,transparent);background:color-mix(in srgb,var(--gold) 5%,transparent)}
-.cloud-signal.watch-signal{color:var(--muted)}
-.money .rise-gain{display:block;margin-top:4px;font:11px Bahnschrift,"Microsoft YaHei",sans-serif;color:var(--short-ink);white-space:nowrap}.money .rise-gain.watch{color:var(--muted)}
-.trend-uplift{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--short);border-left:2px solid var(--short-ink);padding:10px 12px;margin-bottom:12px}
-.trend-uplift>span{font-size:10px;color:var(--muted)}.trend-uplift strong{font:17px Bahnschrift,"Microsoft YaHei",sans-serif;color:var(--short-ink);white-space:nowrap}.trend-uplift small{font:10px "Microsoft YaHei",sans-serif;color:var(--muted)}
-.trend-uplift.watch{background:var(--panel);border-left-color:var(--gold)}.trend-uplift.watch strong{color:var(--ink)}
-@media(max-width:400px){.cost-material{grid-template-columns:30px minmax(0,1fr) auto;gap:7px}.cost-material>img{width:30px;height:30px}.cost-material>svg{display:none}.cost-material-name strong{font-size:11px}.cost-material-value b{font-size:16px}.trend-uplift{flex-wrap:wrap}}
+.craft-timing{display:flex;flex-direction:column;align-items:flex-end;gap:3px;line-height:1.4;font-variant-numeric:tabular-nums}
+@media(max-width:400px){.cost-material{grid-template-columns:30px minmax(0,1fr) auto;gap:7px}.cost-material>img{width:30px;height:30px}.cost-material>svg{display:none}.cost-material-name strong{font-size:11px}.cost-material-value b{font-size:16px}}

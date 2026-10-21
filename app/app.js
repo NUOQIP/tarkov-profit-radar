@@ -1,4 +1,4 @@
-import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,isShortOpportunity,isPriceOpportunity,lowOfferCount } from '/engine.js';
+import { MARKETS,CATEGORIES,collectLoot,collectCatalog,filterCatalog,collectFlips,collectCrafts,summarizeHistory,mergeRecentQuotes,analyzeHistorySummary,normalizeProfile,resolveTradingProfile,tradingTraders,productionStations,traderMaxLevel,profileTaskIds,hasFullProgress,isScavengingItem,SCAVENGING_CATEGORIES,DEFAULT_SCAVENGING_CATEGORIES,normalizeScavengingCategories,profitStability,isPriceOpportunity,lowOfferCount } from '/engine.js';
 import { createUpdateWindow } from '/update-window.js';
 import { quicklookLayout,opportunityTone,QUICKLOOK_VALUE_STEPS,DEFAULT_QUICKLOOK_RANGE,normalizeQuicklookRange,quicklookRangeMatches } from '/quicklook.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -139,7 +139,7 @@ function switchPage(page){
 function syncWorkspace(){
   const page=state.page;
   document.body.dataset.page=page;
-  const titles={loot:['01','捡什么 · 卖什么','单格净值 ↓'],flips:['02','商人倒货','单次净利 ↓'],crafts:['03','藏身处制作','每批净利 ↓'],items:['04','物品一览','单格净值 ↓']};
+  const titles={loot:['01','捡什么 · 卖什么','单件净利 ↓'],flips:['02','商人倒货','单次净利 ↓'],crafts:['03','藏身处制作','每批净利 ↓'],items:['04','物品一览','单格净值 ↓']};
   $('#page-number').textContent=titles[page][0];$('#page-title').textContent=titles[page][1];$('#sort-indicator').textContent=titles[page][2];
   $$('[data-page-count]').forEach(el=>el.hidden=el.dataset.pageCount!==page);
   $('#context-toolbar').hidden=page==='items';$('#catalog-context').hidden=page!=='items';
@@ -161,7 +161,7 @@ function syncQuicklook(){
   $('#loot').setAttribute('aria-label',cloud?'跑刀速览物品图标云':'拾取与出售排行');
   if(state.page==='loot'){
     $('#page-title').textContent=active?'跑刀速览':'捡什么 · 卖什么';
-    $('#sort-indicator').textContent=cloud?'单格净值 · ₽':'单格净值 ↓';
+    $('#sort-indicator').textContent=cloud?'单格净值 · ₽':active?'单格净值 ↓':'单件净利 ↓';
   }
 }
 const rangeLabel=index=>QUICKLOOK_VALUE_STEPS[index]===null?'无上限':QUICKLOOK_VALUE_STEPS[index]===0?'0':QUICKLOOK_VALUE_STEPS[index]/10000+'万';
@@ -200,8 +200,8 @@ function signal(row){
     s=summary?analyzeHistorySummary(summary,row.item,data,options()):{short:false,watch:false,long:false,points:[]};itemSignalCache.set(itemKey,s);
   }
   const stable=row.kind==='loot'?{long:s.long,reason:s.longReason,days:s.longDays}:profitStability(ledger,row,data,options());
-  const short=isShortOpportunity(row,s);
-  const result={...s,short,watch:!short&&isPriceOpportunity(row,s),reason:row.status==='报价延迟'?'等待新报价复核':s.reason,long:stable.long&&(row.kind==='loot'||row.profit>0),longReason:stable.reason,longDays:stable.days};signalCache.set(key,result);return result;
+  const short=isPriceOpportunity(row,s);
+  const result={...s,short,watch:false,long:stable.long&&(row.kind==='loot'||row.profit>0),longReason:stable.reason,longDays:stable.days};signalCache.set(key,result);return result;
 }
 const aliases={ledx:'ledx',gpu:'显卡',bitcoin:'比特币',sugar:'白糖',water:'水',filter:'滤芯',led:'ledx',xianka:'显卡',baitang:'白糖',lvxin:'滤芯',shuixing:'水',yaoshi:'钥匙',yiliaobao:'医疗包',zhentou:'注射器'};
 function catalogRow(r){
@@ -246,7 +246,7 @@ function matches(row){
   if(row.kind==='craft'&&v.station!=='all'&&row.station?.id!==v.station)return false;
   if(!quick&&v.category!=='all'&&v.category!==i.category)return false;
   if(v.filter==='favorites'&&!state.favorites[state.market].includes(i.id))return false;
-  if(v.filter==='short'&&!signal(row).short&&!signal(row).watch)return false;
+  if(v.filter==='short'&&!signal(row).short)return false;
   if(row.kind==='loot'&&((!quick&&(c.minSlot||0)>row.slotValue)||(c.freshOnly&&row.status!=='可参考')))return false;
   if(row.kind!=='loot'&&((c.minProfit>0&&(!Number.isFinite(row.profit)||c.minProfit>row.profit))||(c.budget>0&&(!Number.isFinite(row.purchase)||row.purchase>c.budget))))return false;
   if(row.kind==='craft'&&c.maxHours>0&&row.hours>c.maxHours)return false;
@@ -261,7 +261,7 @@ function tags(r,s){
   const traderWins=vendor&&Number.isFinite(r.traderNet)&&Number.isFinite(r.fleaNet)&&r.traderNet>r.fleaNet;
   return (risk?`<span class="tag quote-risk" title="当前仅 ${r.item.offers} 条报价，可能存在虚标">报价数过低 <b>${r.item.offers}</b></span>`:'')+
     (traderWins?`<span class="tag trader-tag" title="比跳蚤税后多 ₽${fmt(r.traderNet-r.fleaNet)}">卖 ${esc(vendor)}</span>`:'')+
-    (s.short||s.watch?`<span class="tag ${s.short?'short-tag':'watch-tag'}" title="${esc(s.reason)}">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}${s.watch?' · 待复核':''}</span>`:'')+
+    (s.short?`<span class="tag short-tag">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}</span>`:'')+
     (s.long?`<span class="tag long-tag">${r.kind==='loot'?'长期高值':'长期稳定'}</span>`:'')+
     (r.item.eventOnly||r.eventOnly?'<span class="tag event-tag">活动限定</span>':'');
 }
@@ -275,7 +275,7 @@ function quicklookTile(r,cell,index){
   const vendor=data.traders[r.vendor?.trader]?.name;
   const traderWins=vendor&&Number.isFinite(r.fleaNet)&&Number.isFinite(r.traderNet)&&r.traderNet>r.fleaNet;
   const risk=data.flea.enabled&&!i.types.includes('noFlea')&&lowOfferCount(i);
-  const status=s.short||s.watch?`<span class="cloud-signal ${s.watch?'watch-signal':''}">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}${s.watch?' 待核':''}</span>`:s.long?'<span class="cloud-signal">长期高值</span>':'';
+  const status=s.short?`<span class="cloud-signal">${icon('trend')}${s.riseWindow==='24h'?'24h':'7日'} ${percent(s.riseChange)}</span>`:s.long?'<span class="cloud-signal">长期高值</span>':'';
   const flag=risk?`<span class="cloud-risk" title="当前仅 ${i.offers} 条报价，可能存在虚标">报价 ${i.offers}</span>`:'';
   const note=traderWins?`<span class="cloud-vendor">卖 ${esc(vendor)}</span>`:r.fleaNet===null&&vendor?`<span class="cloud-vendor">${esc(vendor)} 回收</span>`:'';
   return `<button class="quicklook-tile ${tone} tier-${cell.tier}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · ${esc(r.channel)} · 单格净值 ₽${fmt(r.slotValue)}">
@@ -320,23 +320,24 @@ function renderQuicklook(){
 function card(r,index){
   const i=r.item,s=signal(r),loot=r.kind==='loot',craft=r.kind==='craft',fav=state.favorites[state.market].includes(i.id);
   const perItem=loot&&!inQuicklook(),vendor=data.traders[r.vendor?.trader]?.name;
-  const label=loot?(perItem?'净到手 / 个':'净到手 / 格'):craft?'净利 / 批':'净利 / 次';
+  const label=loot?(perItem?'净利 / 个':'净到手 / 格'):craft?'净利 / 批':'净利 / 次';
   const value=loot?fmt(perItem?r.net:r.slotValue):Number.isFinite(r.profit)?sign(r.profit):'待估值';
   const actor=craft?r.station:r.trader;
-  const route=loot?'':`<div class="route">${image(actor?.image)}<span>${esc(actor?.name||'未知')} ${craft?'Lv.':'LL'}${r.level} · ${craft?'制作':r.isBarter?'兑换':'直购'}${r.execution?.missing.some(x=>/Lv\.|LL|任务|等级|版本/.test(x))?' <b class="condition-tag">未解锁</b>':''}</span><span>${craft?duration(r.seconds)+' · ×'+r.count:'限购 '+(r.limit??'未知')}</span></div>`;
+  const timing=craft?`<span class="craft-timing"><span>${duration(r.seconds)} · ×${r.count}</span><span>时薪 ${sign(r.hourly)}</span></span>`:`<span>限购 ${r.limit??'未知'}</span>`;
+  const route=loot?'':`<div class="route">${image(actor?.image)}<span>${esc(actor?.name||'未知')} ${craft?'Lv.':'LL'}${r.level} · ${craft?'制作':r.isBarter?'兑换':'直购'}${r.execution?.missing.some(x=>/Lv\.|LL|任务|等级|版本/.test(x))?' <b class="condition-tag">未解锁</b>':''}</span>${timing}</div>`;
   const ingredients=r.recipe?`<div class="ingredients">${r.recipe.slice(0,6).map(m=>`<span class="ingredient" title="${esc(m.item.name)} · ${m.tool?'可复用工具':esc(m.source)}">${image(m.item.image)}<span>${esc(m.item.shortName)} <i>×${m.count}</i>${m.tool?' ⌁':''}</span></span>`).join('')}${r.recipe.length>6?`<span class="ingredient">+${r.recipe.length-6} 项</span>`:''}</div>`:'';
   const metrics=metric('最低价',fmt(i.price))+metric('24h均价',fmt(i.average))+
     (loot?metric(vendor?`较 ${esc(vendor)}`:'商人对比',`<span title="跳蚤扣税后净到手减去商人回收价">${Number.isFinite(r.fleaNet)&&Number.isFinite(r.traderNet)?sign(r.fleaNet-r.traderNet):'—'}</span>`):metric(craft?'材料成本':'进货成本',fmt(r.purchase)));
   const extra=loot?`<span>${i.width} × ${i.height} 格</span><span>${perItem?'单格 ₽'+fmt(r.slotValue):'单件 ₽'+fmt(r.net)}</span>`:
-    craft?`<span>时薪 ${sign(r.hourly)}</span>`:
+    craft?'':
     `<span>${r.roi===null?'':`回报率 ${fmt(r.roi*100)}%`}</span><span>预计净回款 ${r.count>1?'×'+r.count+' ':''} ${fmt(r.fleaNet)}</span>`;
 
   const quoteAt=r.quoteAt||i.scan;
   const quote=r.status==='可参考'||(loot&&inQuicklook()&&r.status==='报价延迟')?ago(quoteAt):r.status+(quoteAt?' · '+ago(quoteAt):'');
   return `<article style="--order:${Math.min(index,7)}" class="card ${opportunityTone(r,s)}" data-row="${esc(r.id)}">
   <div class="card-main" role="button" tabindex="0" data-open="${esc(r.id)}" aria-label="查看${esc(i.name)}明细">
-    <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${i.isPreset?`<span class="tag">${i.category==='weapon'?'武器预设':'装备预设'}</span>`:''}${tags(r,s)||(i.isPreset?'':esc(CATEGORIES[i.category]))}</div></div><div class="money"><strong class="${loot?'':r.profit<0?'negative':'positive'}">${value}</strong><span class="unit">${label}</span>${s.short||s.watch?`<span class="rise-gain ${s.watch?'watch':''}" title="相比近期常态价，每${loot?'个':craft?'批':'次'}预计额外净到手">多到手 ${sign(s.extraNet*r.count)}</span>`:''}</div></div>
-    ${route}${ingredients}<div class="metrics">${metrics}</div><div class="card-extra">${extra}</div></div>
+    <div class="item-top"><div class="item-picture">${image(i.image,i.name)}${loot?`<span class="rank">${index+1}</span>`:''}</div><div class="item-info"><div class="item-name" title="${esc(i.name)}">${esc(i.shortName||i.name)}</div><div class="item-category">${i.isPreset?`<span class="tag">${i.category==='weapon'?'武器预设':'装备预设'}</span>`:''}${tags(r,s)||(i.isPreset?'':esc(CATEGORIES[i.category]))}</div></div><div class="money"><strong class="${loot?'':r.profit<0?'negative':'positive'}">${value}</strong><span class="unit">${label}</span></div></div>
+    ${route}${ingredients}<div class="metrics">${metrics}</div>${extra?`<div class="card-extra">${extra}</div>`:''}</div>
     <div class="card-tail"><i class="quote-dot ${r.status==='可参考'?'':'old'}"></i><span class="${r.status==='可参考'?'':'age-old'}" title="所用报价中最旧的时间 ${quoteAt?clock(quoteAt):'未知'}">${esc(quote)}</span><span class="tail-spacer"></span><button class="favorite ${fav?'active':''}" data-favorite="${i.id}" aria-label="${fav?'取消收藏':'收藏'}${esc(i.name)}" aria-pressed="${fav}">${icon('star')}</button><button data-open="${esc(r.id)}" aria-label="打开${esc(i.name)}明细">${icon('chevron')}</button></div></article>`;
 }
 function anchors(){return Object.fromEntries(['loot','flips','crafts'].map(k=>{const el=$('#'+k),top=el.getBoundingClientRect().top;const first=[...el.querySelectorAll('.card')].find(c=>c.getBoundingClientRect().bottom>top);return [k,{top:el.scrollTop,id:first?.dataset.row,offset:first?first.getBoundingClientRect().top-top:0}];}));}
@@ -349,12 +350,14 @@ function render(preserve=false){
   $$('[data-loot-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lootScope===view().lootScope)));
 
   for(const key of ['loot','flips','crafts']){
-    visible[key]=rows[key].filter(matches);$('#'+key+'-count').textContent=fmt(visible[key].length);
+    visible[key]=rows[key].filter(matches);
+    if(key==='loot'&&!inQuicklook())visible[key].sort((a,b)=>b.net-a.net||a.id.localeCompare(b.id));
+    $('#'+key+'-count').textContent=fmt(visible[key].length);
     if(state.page!==key)continue;
     if(key==='loot'&&inCloud()&&visible.loot.length){renderQuicklook();continue;}
     let message='尝试放宽分类、预算或解锁条件。',title='暂无符合条件的机会';
     if(view().filter==='favorites'){title='这里还没有收藏';message='点物品右下角的星标，下次就能快速找到。';}
-    if(view().filter==='short'){title=signalsLoading?'正在核对涨价机会':'暂无符合条件的涨价机会';message='已复核标红，待复核保留提示。';}
+    if(view().filter==='short'){title=signalsLoading?'正在核对涨价机会':'暂无符合条件的涨价机会';message='尝试放宽筛选，或稍后查看新行情。';}
     $('#'+key).innerHTML=visible[key].slice(0,limit[key]).map(card).join('')||`<div class="empty">${icon(view().filter==='favorites'?'star':'search')}<strong>${title}</strong><p>${message}</p>${key==='loot'&&view().lootScope==='scavenging'?'<button data-loot-scope="all">在全部物品中查找</button>':''}<button data-reset>重置筛选</button></div>`;
     if(inCloud()&&!visible[key].length)$('#'+key+' .empty').insertAdjacentHTML('beforeend','<button data-quicklook-view="list">查看完整列表</button>');
     if(visible[key].length>limit[key])$('#'+key).insertAdjacentHTML('beforeend',`<button class="load-more" data-more="${key}">继续查看 ${Math.min(40,visible[key].length-limit[key])} 项 ${icon('arrow-down')}</button>`);
@@ -490,8 +493,7 @@ function inspectChartPointer(event){
 function historyDetail(){
   if(!detailRow||!data)return;const r=detailRow,s=signal(r),h=historyFor(r.item);
   if(r.item.currencyOnly){$('#history-content').innerHTML='<p>货币条目不提供跳蚤价格走势。</p>';return;}
-  const uplift=s.short||s.watch?`<div class="trend-uplift ${s.watch?'watch':''}"><span>${s.riseWindow==='24h'?'24h':'7日'}常态 ₽${fmt(s.riseBaseline)}${s.watch?' · 待复核':''}</span><strong>多到手 ${sign(s.extraNet*r.count)} <small>/ ${r.kind==='craft'?'批':r.kind==='flip'?'次':'个'}</small></strong></div>`:'';
-  $('#history-content').innerHTML=h?.points?`${uplift}${chartMarkup(h.points)}<div class="history-summary"><span>7日常态 <strong>₽${fmt(s.baseline)}</strong></span><span>较常态 <strong>${percent(s.change7)}</strong></span><span>24h <strong>${percent(s.change24)}</strong></span></div>`:'<p>正在读取真实历史报价…</p>';
+  $('#history-content').innerHTML=h?.points?`${chartMarkup(h.points)}<div class="history-summary"><span>7日常态 <strong>₽${fmt(s.baseline)}</strong></span><span>较常态 <strong>${percent(s.change7)}</strong></span><span>24h <strong>${percent(s.change24)}</strong></span></div>`:'<p>正在读取真实历史报价…</p>';
 }
 
 function channelComparison(r){
@@ -516,16 +518,16 @@ function relatedRoutes(r){
 }
 function detailMarkup(r){
   const i=r.item,loot=r.kind==='loot',craft=r.kind==='craft',s=signal(r);
-  const materialRows=(r.recipe||[]).map(m=>`<button class="cost-material" data-open="${esc(m.item.id)}">${image(m.item.image)}<span class="cost-material-name"><strong>${esc(m.item.name)} <em>×${m.count}</em></strong><small>${m.tool?'可复用工具':`${esc(m.source)} · 单价 ₽${fmt(m.unitCost)}`}</small></span><span class="cost-material-value"><b>${m.tool?(m.capital===0?'已持有':m.capital===null?'待核价':'₽'+fmt(m.capital)):'₽'+fmt(m.cost)}</b>${m.tool?'<small>首购另计</small>':''}</span>${icon('chevron')}</button>`).join('');
+  const materialRows=(r.recipe||[]).map(m=>`<button class="cost-material" data-open="${esc(m.item.id)}">${image(m.item.image)}<span class="cost-material-name"><strong>${esc(m.item.name)} <em>×${m.count}</em></strong><small>${m.tool?'可复用工具':`${esc(m.source)} · 单价 ₽${fmt(m.unitCost)}`}</small></span><span class="cost-material-value"><b>${m.tool?(m.capital===null?'待核价':'₽'+fmt(m.capital)):'₽'+fmt(m.cost)}</b>${m.tool?'<small>首购另计</small>':''}</span>${icon('chevron')}</button>`).join('');
   const conditions=r.execution?.missing||[],task=data.tasks?.[r.task];
   return `<div class="detail-identity"><div class="item-picture">${image(i.image,i.name)}</div><div><h2 id="detail-title">${esc(i.name)}</h2><div class="item-category">${esc(CATEGORIES[i.category])} · ${esc(MARKETS[state.market])}</div><div class="item-category">${tags(r,s)}</div></div></div>
   <div class="detail-actions">${detailTrail.length?'<button id="detail-back">← 返回</button>':''}<button data-favorite="${i.id}">${icon('star')}${state.favorites[state.market].includes(i.id)?'已收藏':'收藏'}</button><button id="share-item">${icon('copy')}复制链接</button></div>
-  <div class="detail-metrics"><div class="detail-metric"><small>${loot?'单件净到手':craft?'最终净利润 / 批':'预计净利润 / 次'}</small><strong class="${!loot&&r.profit<0?'negative':''}">₽${fmt(loot?r.net:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'每格净到手':craft?'每批产出净到手':'预计净回款'}</small><strong>₽${fmt(loot?r.slotValue:r.net)}</strong></div></div>
+  <div class="detail-metrics"><div class="detail-metric"><small>${loot?'净利 / 个':craft?'最终净利润 / 批':'预计净利润 / 次'}</small><strong class="${!loot&&r.profit<0?'negative':''}">₽${fmt(loot?r.net:r.profit)}</strong></div><div class="detail-metric"><small>${loot?'每格净到手':craft?'每批产出净到手':'预计净回款'}</small><strong>₽${fmt(loot?r.slotValue:r.net)}</strong></div></div>
   ${loot?channelComparison(r):`<section class="purchase-detail"><div class="trade-summary"><span>${craft?'材料成本':'进货成本'} <b>₽${fmt(r.purchase)}</b></span><span>上架手续费 <b>₽${fmt(r.fee)}</b></span></div>${materialRows?`<div class="cost-materials">${materialRows}</div>`:`<div class="purchase-source">${esc(r.trader?.name||'商人')} · ${r.isBarter?'兑换':'直购'} ×${r.count}</div>`}${craft?`<div class="craft-reference"><span>制作 ${duration(r.seconds)} · 产出 ×${r.count}</span><span>参考时薪 ${sign(r.hourly)}</span></div>`:''}</section>`}
   <div class="quote-reference"><span>最低价 <b>₽${fmt(i.price)}</b></span><span>24h均价 <b>₽${fmt(i.average)}</b></span><span>${fmt(i.offers)} 条报价</span></div>
   <section class="detail-section"><h3>价格走势<div class="chart-controls"><button data-days="7" class="${chartDays===7?'active':''}">7日</button><button data-days="30" class="${chartDays===30?'active':''}">30日</button></div></h3><div id="history-content"></div></section>
   ${relatedRoutes(r)}
-  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">当前条件满足</span>'}</div>${r.task&&!options().maxProgress?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}${(r.recipe||[]).filter(m=>m.tool).map(m=>`<label class="tool-line"><input type="checkbox" data-owned-tool="${m.item.id}" ${options().ownedTools.includes(m.item.id)?'checked':''}>我已持有 ${esc(m.item.name)}</label>`).join('')}</section>`:''}
+  ${!loot?`<section class="detail-section"><h3>执行条件</h3><div class="condition-list">${conditions.length?conditions.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="tag long-tag">当前条件满足</span>'}</div>${r.task&&!options().maxProgress?`<label class="tool-line"><input type="checkbox" data-task-complete="${r.task}" ${options().completedTasks.includes(r.task)?'checked':''}>已完成 ${esc(task?.name||'解锁任务')}</label><a class="source-link" href="https://tarkov.dev/task/${r.task}" target="_blank" rel="noreferrer">查看任务 ↗</a>`:''}</section>`:''}
   <div class="detail-source"><span>${i.scan?clock(i.scan):'报价时间未知'}</span><a class="source-link" href="https://tarkov.dev/item/${encodeURIComponent(i.slug)}?gameMode=${state.market}" target="_blank" rel="noreferrer">上游资料 ↗</a></div>`;
 }
 async function openDetail(id,remember=true){
@@ -684,8 +686,8 @@ $$('dialog').forEach(dialog=>{
   dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closePanel(dialog);});
 });
 $('#detail-content').addEventListener('change',e=>{
-  const key=e.target.dataset.taskComplete?'completedTasks':e.target.dataset.ownedTool?'ownedTools':null;if(!key)return;
-  const id=e.target.dataset.taskComplete||e.target.dataset.ownedTool,list=state.profiles[state.market][key];
+  const key='completedTasks',id=e.target.dataset.taskComplete;if(!id)return;
+  const list=state.profiles[state.market][key];
   if(e.target.checked&&!list.includes(id))list.push(id);else if(!e.target.checked)state.profiles[state.market][key]=list.filter(x=>x!==id);
   persist();const previous=detailRow?.id;rebuild();if(previous)openDetail(previous);
 });
