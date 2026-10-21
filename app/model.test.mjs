@@ -326,13 +326,13 @@ test('a seven-day rise remains red after a plateau and does not require thirty d
   assert.equal(analyzeHistory(points,{...i,scan:new Date(now-2*3600000).toISOString()},data,{},now).short,false);
 });
 
-test('quicklook defaults include five loot types while ammo boxes remain separately selectable',()=>{
+test('quicklook defaults include four loot types while ammo boxes and posters remain selectable',()=>{
   const objects=[item('mod',{category:'mods'}),item('food',{category:'food'}),item('barter',{category:'barter'}),
     item('intel',{category:'barter'}),item('intel-other',{category:'other',name:'情报文件夹'}),
     item('poster',{category:'other',name:'情报海报',types:['poster']}),item('medical',{category:'medical'}),
     item('ammo-box',{category:'ammo',types:['ammoBox']}),item('ammo',{category:'ammo',types:['ammo']}),item('document',{category:'other',name:'普通文件'}),item('key',{category:'keys'}),item('gun',{category:'weapon'}),item('cash',{currencyOnly:true})];
   const rows=collectLoot(dataset(objects),{},now);
-  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['barter','food','intel','intel-other','medical','poster']);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item)).map(r=>r.id).sort(),['barter','food','intel','intel-other','medical']);
   for(const id of ['mod','poster','medical','key','gun'])assert.equal(rows.some(r=>r.id===id),true);
   assert.equal(isScavengingItem({category:'barter',isPreset:true}),false);
   assert.equal(isScavengingItem({category:'weapon',isPreset:true,default:true},['weapon']),true);
@@ -348,6 +348,7 @@ test('quicklook defaults include five loot types while ammo boxes remain separat
   assert.equal(isScavengingItem(objects.find(i=>i.id==='mod'),['mods']),true);
   assert.equal(isScavengingItem(objects.find(i=>i.id==='ammo'),['ammoBox']),false);
   assert.deepEqual(rows.filter(r=>isScavengingItem(r.item,['ammoBox'])).map(r=>r.id),['ammo-box']);
+  assert.deepEqual(rows.filter(r=>isScavengingItem(r.item,['poster'])).map(r=>r.id),['poster']);
   assert.equal(isScavengingItem(objects.find(i=>i.id==='ammo-box'),['ammo']),false);
   assert.equal(isScavengingItem(objects.find(i=>i.id==='medical'),[]),false);
   assert.equal(scavengingCategory(item('flash-drive',{category:'barter',sourceCategories:['5448ecbe4bdc2d60728b4568']})),'intelligence');
@@ -358,17 +359,19 @@ test('quicklook defaults include five loot types while ammo boxes remain separat
   assert.equal(isScavengingItem(item('paracord',{category:'barter',types:['barter','specialSlot'],sourceCategories:['590c745b86f7743cc433c5f2']})),true);
 });
 
-test('default-category migration removes ammo boxes once while preserving custom choices',()=>{
-  const oldFive=['barter','food','intelligence','ammoBox','medical'],oldSix=[...oldFive,'poster'];
+test('default-category migration removes ammo boxes and posters once while preserving custom choices',()=>{
+  const oldFive=['barter','food','intelligence','ammoBox','medical'],oldSix=[...oldFive,'poster'],posterDefault=['barter','food','intelligence','medical','poster'];
   assert.deepEqual(migrateScavengingCategories(),DEFAULT_SCAVENGING_CATEGORIES);
-  for(const [selected,revision] of [[oldFive,0],[oldSix,0],[oldSix,1]]){
+  for(const [selected,revision] of [[oldFive,0],[oldSix,0],[oldSix,1],[posterDefault,1],[posterDefault,2]]){
     const original=[...selected],upgraded=migrateScavengingCategories(selected,revision);
     assert.deepEqual(upgraded,DEFAULT_SCAVENGING_CATEGORIES);
     assert.deepEqual(migrateScavengingCategories(upgraded,SCAVENGING_SELECTION_VERSION),upgraded);
     assert.deepEqual(selected,original);
   }
-  for(const selected of [[],['ammoBox'],['keys'],['medical','ammoBox']])assert.deepEqual(migrateScavengingCategories(selected,1),selected);
+  for(const selected of [[],['ammoBox'],['poster'],['keys'],['medical','ammoBox'],['medical','poster']])assert.deepEqual(migrateScavengingCategories(selected,1),selected);
   assert.deepEqual(migrateScavengingCategories(oldFive,1),oldFive);
+  assert.deepEqual(migrateScavengingCategories(oldSix,2),oldSix);
+  assert.deepEqual(migrateScavengingCategories(posterDefault,SCAVENGING_SELECTION_VERSION),posterDefault);
   assert.deepEqual(migrateScavengingCategories(oldSix,SCAVENGING_SELECTION_VERSION),oldSix);
 });
 

@@ -92,8 +92,8 @@ export const SCAVENGING_CATEGORIES = {
   weapon:'武器',melee:'近战武器',mods:'武器配件',armor:'护甲 / 头盔',ammo:'弹药 / 投掷物',
   keys:'钥匙 / 门卡',gear:'背包 / 装备',containers:'容器',poster:'海报',other:'其他'
 };
-export const DEFAULT_SCAVENGING_CATEGORIES = ['barter','food','intelligence','medical','poster'];
-export const SCAVENGING_SELECTION_VERSION = 2;
+export const DEFAULT_SCAVENGING_CATEGORIES = ['barter','food','intelligence','medical'];
+export const SCAVENGING_SELECTION_VERSION = 3;
 export function normalizeScavengingCategories(selected) {
   return Array.isArray(selected)?[...new Set(selected.filter(k=>Object.hasOwn(SCAVENGING_CATEGORIES,k)))]:[...DEFAULT_SCAVENGING_CATEGORIES];
 }
@@ -102,7 +102,8 @@ export function migrateScavengingCategories(selected, revision = 0) {
   const matches=keys=>types.length===keys.length&&keys.every(k=>types.includes(k));
   const previous=['barter','food','intelligence','ammoBox','medical'];
   // Update recognized old defaults once; preserve deliberate custom selections.
-  if(revision<SCAVENGING_SELECTION_VERSION&&(matches([...previous,'poster'])||(!revision&&matches(previous))))return [...DEFAULT_SCAVENGING_CATEGORIES];
+  if(revision<2&&(matches([...previous,'poster'])||(!revision&&matches(previous))))return [...DEFAULT_SCAVENGING_CATEGORIES];
+  if(revision<3&&matches(['barter','food','intelligence','medical','poster']))return [...DEFAULT_SCAVENGING_CATEGORIES];
   return types;
 }
 // Disjoint browsing categories. Special equipment and maps stay outside quicklook.
