@@ -34,7 +34,7 @@ input:focus,select:focus{border-color:var(--accent)}
   linear-gradient(125deg,transparent 44%,#ffffff06 44%,#ffffff06 56%,transparent 56%)}
 .ambient-scene::before{content:"";position:absolute;left:24%;top:12%;width:64vw;height:92vh;transform:rotate(-24deg);
   border:1px solid #ffffff08;background:linear-gradient(90deg,transparent 70%,#ffffff04 70%);box-shadow:0 0 0 70px #00000008}
-.ambient-scene::after{content:"";position:inset:0;opacity:.14;pointer-events:none;
+.ambient-scene::after{content:"";position:absolute;inset:0;opacity:.14;pointer-events:none;
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23ffffff' opacity='.11' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E")}
 .ambient-grid{background-size:78px 78px;background-image:linear-gradient(#ffffff09 1px,transparent 1px),linear-gradient(90deg,#ffffff09 1px,transparent 1px);mask-image:linear-gradient(140deg,transparent,#0006)}
 .terrain-lines{animation:none;opacity:.03;transform:translateX(8%);color:#8fa6b8}
@@ -51,8 +51,8 @@ input:focus,select:focus{border-color:var(--accent)}
   clip-path:polygon(0 6px,6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%)}
 .brand strong{font-size:16px;font-weight:800;letter-spacing:1.5px}
 .brand small{color:var(--muted);font-size:7px;letter-spacing:2.4px;margin-top:5px}.brand small span{display:none}
-.market-tabs{padding:0;gap:0;background:#0a0d1188;border:1px solid var(--line);border-radius:0}
-.market-tabs button{height:31px;min-width:62px;padding:4px 13px;color:var(--muted);font-size:10px;letter-spacing:.4px;border-radius:0}
+.market-tabs{padding:0;gap:0;background:var(--glass);border:1px solid var(--line);border-radius:0}
+.market-tabs button{height:31px;min-width:62px;padding:4px 13px;color:var(--ink);font-size:10px;letter-spacing:.4px;border-radius:0}
 .market-tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:700;box-shadow:none}
 .market-tabs button:hover{background:var(--accent-soft);color:var(--ink)}
 .market-tabs button[aria-pressed=true]:hover{background:var(--accent);color:var(--accent-ink)}
@@ -111,7 +111,7 @@ input:focus,select:focus{border-color:var(--accent)}
 .card{--card-signal:#8ea6b0;--card-fill:var(--surface);padding:16px 17px 6px;border:1px solid var(--line);
   border-left:2px solid color-mix(in srgb,var(--card-signal) 55%,transparent);border-radius:1px;
   background:linear-gradient(140deg,color-mix(in srgb,var(--card-fill) 86%,transparent),color-mix(in srgb,var(--card-fill) 60%,transparent));
-  box-shadow:inset 0 1px #ffffff05;cursor:pointer;position:relative;overflow:hidden;
+  box-shadow:inset 0 1px #ffffff05;cursor:pointer;position:relative;
   transition:border-color .25s,background .25s,box-shadow .25s}
 .card::before{content:"";top:0;left:0;right:auto;width:29px;height:2px;background:var(--card-signal);border:0;opacity:.7}
 .card::after{content:"";position:absolute;top:8px;right:8px;width:6px;height:6px;border-top:1px solid var(--card-signal);border-right:1px solid var(--card-signal);opacity:.4;pointer-events:none;transition:opacity .2s}
