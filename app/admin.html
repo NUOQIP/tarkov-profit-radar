@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow"><title>管理端 · 塔科夫赚钱监控</title>
-  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/admin/admin.css"><link rel="stylesheet" href="/community.css"><link rel="stylesheet" href="/accounts.css">
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/community.css"><link rel="stylesheet" href="/accounts.css"><link rel="stylesheet" href="/admin/admin.css">
   <script type="module" src="/admin/admin.js"></script>
 </head>
-<body>
+<body class="admin-body">
   <header class="topbar"><a class="brand" href="/"><img src="/fence.webp" alt=""><span>塔科夫赚钱监控<small>CONTROL ROOM / 管理端</small></span></a><div class="header-actions"><a href="/">返回看板 ↗</a><button id="logout" hidden>退出登录</button></div></header>
   <main>
     <section id="login" class="login-panel" aria-labelledby="login-title">
-      <span class="eyebrow">AUTHORIZED PERSONNEL</span><h1 id="login-title">进入控制室</h1><p id="login-note">正在检查管理入口…</p>
+      <div class="login-copy"><span class="eyebrow">AUTHORIZED PERSONNEL</span><h1 id="login-title">进入控制室<span aria-hidden="true">.</span></h1><p id="login-note">正在检查管理入口…</p>
       <form id="login-form" hidden><label for="password">管理员密码</label><div class="password-row"><input id="password" type="password" autocomplete="current-password" required maxlength="128"><button class="primary" type="submit">登录 →</button></div></form>
-      <p id="login-error" class="error" role="alert"></p><div class="login-decoration" aria-hidden="true">01 / OPERATOR ACCESS</div>
+      <p id="login-error" class="error" role="alert"></p><div class="login-decoration" aria-hidden="true"><span>01 / OPERATOR ACCESS</span><span>EF-T / CONTROL</span></div></div>
+      <div class="access-art" aria-hidden="true"><div class="access-art-label"><span>CONTROL<br>ROOM</span><b>01</b></div><svg class="access-diagram" viewBox="0 0 400 360" fill="none"><g stroke="currentColor"><path d="M200 32 336 110v140l-136 78-136-78V110Z" stroke-width="1"/><path d="M200 61 311 125v110l-111 64-111-64V125Z" stroke-dasharray="3 6"/><circle cx="200" cy="180" r="108" stroke-width="1"/><circle cx="200" cy="180" r="130" stroke-dasharray="1 7"/><path d="M200 0v360M20 180h360" stroke-opacity=".3"/><path d="m200 83 84 49v97l-84 48-84-48v-97Z" stroke-width="2"/><path d="m200 83 84 49-84 48-84-48Zm0 97v97" stroke-width="2"/><path d="M45 37h24M57 25v24M331 323h24M343 311v24M39 180h18M343 180h18M200 19v18M200 323v18" stroke-width="2"/></g><path d="m200 114 57 33-57 32-57-32Z" fill="currentColor"/><path d="M143 160v53l44 25v-53Z" fill="currentColor" opacity=".35"/><path d="M257 160v53l-44 25v-53Z" fill="currentColor" opacity=".7"/></svg><div class="access-art-footer"><span>RESTRICTED ACCESS</span><span>●</span></div></div>
     </section>
     <section id="workspace" hidden>
-      <div class="page-heading"><div><span class="eyebrow" id="admin-section">ITEM CLASSIFICATION</span><h1 id="admin-title">物品管理</h1></div><span class="scope" id="admin-scope">分类修改同步所有市场</span></div>
+      <div class="page-heading"><div class="page-heading-copy"><span class="eyebrow" id="admin-section">ITEM CLASSIFICATION</span><h1 id="admin-title">物品管理</h1></div><span class="scope" id="admin-scope">分类修改同步所有市场</span><div class="heading-mark" aria-hidden="true"><span>CTRL</span><i></i></div></div>
       <div id="overview" class="overview" aria-label="服务状态"></div>
       <nav class="admin-tabs" aria-label="管理功能"><button type="button" data-admin-tab="items" aria-pressed="true">物品</button><button type="button" data-admin-tab="comments" aria-pressed="false">评论</button><button type="button" data-admin-tab="mail" aria-pressed="false">邮箱</button></nav>
       <div class="catalog" id="item-catalog">

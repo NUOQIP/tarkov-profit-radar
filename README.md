@@ -99,7 +99,7 @@ Node 服务的 `/admin/` 提供密码保护的管理端：编辑活动分类与�
 
 ## 数据与性能
 
-行情来自 [tarkov.dev](https://tarkov.dev)，稀有度采用固定版本的 SPT 公开物品库，详见 [SPT 数据与排序](docs/spt-rarity.md)。前台每5分钟检查，新行情15秒后自动应用，也可暂停或立即更新。
+行情来自 [tarkov.dev](https://tarkov.dev)，稀有度采用固定版本的 SPT 公开物品库，详见 [SPT 数据与排序](docs/spt-rarity.md)。前台每5分钟检查，新行情15秒后自动应用，也可立即更新。
 
 公共行情使用 IndexedDB、ETag 与 Brotli；再次打开先恢复完成标色的缓存，再核对更新。生产脚本合并压缩并按内容版本缓存，物品图缓存30天。账号与评论写入不进入公共缓存。实测记录见 [性能](docs/performance.md)。
 

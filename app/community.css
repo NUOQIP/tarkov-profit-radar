@@ -1,5 +1,67 @@
-.metrics.metrics-loot{grid-template-columns:repeat(2,minmax(0,1fr))}.metrics.metrics-trade{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics-trade>div:last-child{grid-column:3}.metrics b{font-variant-numeric:tabular-nums}.card-tail{min-height:30px}.card-tail button{display:inline-flex;align-items:center;gap:4px}.detail-metrics.profit-focus{grid-template-columns:1fr}.trade-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.trade-summary span{display:flex;flex-direction:column;gap:5px}.trade-summary b{font-variant-numeric:tabular-nums}.banned-tag{background:#8a8e9a20;color:#b8bdca;border:1px solid #9da3b638}.level-tag{background:#d6ab5a18;color:#ddbd7c;border:1px solid #d6ab5a38}.player-level-setting{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 16px;margin-bottom:20px;background:var(--raised,var(--surface));border:1px solid var(--line);border-left:3px solid var(--accent,#dfbf79);border-radius:6px}.player-level-setting label{font-size:13px;font-weight:700}.player-level-setting>div{display:flex;gap:8px;align-items:center}.player-level-setting span{color:var(--muted);font-size:12px}.player-level-setting input{width:86px;padding:8px 10px;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}.item-comments{margin-top:24px}.item-comments h3{display:flex;gap:8px;align-items:center}.comment-form{display:grid;gap:9px;padding:14px;border:1px solid var(--line);background:var(--raised,var(--surface));border-radius:7px}.comment-form input,.comment-form textarea{box-sizing:border-box;width:100%;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;font:inherit;font-size:12px;padding:9px 11px;outline:none}.comment-form>input{max-width:220px}.comment-form input:focus,.comment-form textarea:focus{border-color:var(--accent,#dfbf79)}.comment-form textarea{resize:vertical;min-height:84px;max-height:220px;line-height:1.65}.comment-form-actions{display:flex;align-items:center;gap:10px;min-height:32px;font-size:11px;color:var(--muted)}.comment-form-actions [data-comment-message]{flex:1}.comment-form-actions button{padding:7px 18px}.comment-trap{position:absolute!important;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);pointer-events:none}.comment-list{margin-top:8px}.player-comment{padding:16px 2px;border-bottom:1px solid var(--line)}.player-comment header{display:flex;align-items:center;gap:8px;font-size:12px}.player-comment header strong{color:var(--ink);font-weight:650}.player-comment time{margin-left:auto;color:var(--muted);font-size:10px}.comment-market{padding:2px 5px;border-radius:3px;background:#a8b7c512;color:var(--muted);font-size:10px}.player-comment p{margin:9px 0 0;font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}.comment-empty{padding:18px 0;margin:0;text-align:center;font-size:12px;color:var(--muted)}.comment-retry{width:100%;padding:10px;border:1px solid var(--line);border-radius:5px;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer}.comment-retry:hover{color:var(--ink);border-color:var(--accent,#dfbf79)}.admin-tabs{display:flex;gap:7px;margin-bottom:16px}.admin-tabs button{padding:9px 17px}.admin-tabs button[aria-pressed=true]{color:#121619;background:#dfc181;border-color:#dfc181}.moderation-toolbar{display:flex;gap:10px;align-items:center;padding:15px;border-bottom:1px solid var(--line)}.moderation-toolbar input{flex:1;min-width:0}.moderation-comment{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:15px;padding:18px;border-bottom:1px solid var(--line)}.moderation-comment header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.moderation-comment p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.7;margin:9px 0}.moderation-comment small{font-size:11px;color:var(--muted)}.moderation-comment [data-moderate]{align-self:center}.moderation-comment.is-hidden{opacity:.55}.moderation-comment .comment-item{color:var(--muted);font-size:12px}.moderation-footer{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;font-size:12px;color:var(--muted)}
-@media(max-width:560px){.trade-summary{gap:8px}.trade-summary span{font-size:11px}.trade-summary b{font-size:13px}.comment-form{padding:11px}.moderation-comment{grid-template-columns:minmax(0,1fr)}.moderation-comment [data-moderate]{justify-self:end}.player-level-setting{margin-bottom:15px}.metrics.metrics-trade{gap:8px}}
-.card-tail button[data-open]{width:auto;white-space:nowrap}
+.metrics.metrics-loot{grid-template-columns:repeat(2,minmax(0,1fr))}.metrics.metrics-trade{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics-trade>div:last-child{grid-column:3}.metrics b{font-variant-numeric:tabular-nums}.card-tail{min-height:30px}.card-tail button{display:inline-flex;align-items:center;gap:4px}.detail-metrics.profit-focus{grid-template-columns:1fr}.trade-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.trade-summary span{display:flex;flex-direction:column;gap:5px}.trade-summary b{font-variant-numeric:tabular-nums}.banned-tag{background:#8a8e9a20;color:#b8bdca;border:1px solid #9da3b638}.level-tag{background:#d6ab5a18;color:#ddbd7c;border:1px solid #d6ab5a38}.player-level-setting{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 16px;margin-bottom:20px;background:var(--raised,var(--surface));border:1px solid var(--line);border-left:3px solid var(--accent,#dfbf79);border-radius:6px}.player-level-setting label{font-size:13px;font-weight:700}.player-level-setting>div{display:flex;gap:8px;align-items:center}.player-level-setting span{color:var(--muted);font-size:12px}.player-level-setting input{width:86px;padding:8px 10px;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
 
-.comment-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;color:var(--muted);font-size:11px}.comment-pagination[hidden],.comment-page-message[hidden]{display:none}.comment-pagination button{padding:7px 11px;font-size:11px;white-space:nowrap}.comment-pagination>span{font-variant-numeric:tabular-nums}.comment-list[aria-busy=true]{opacity:.55}.comment-page-message{font-size:11px;color:var(--accent);margin:12px 0 0}
+/* Player discussions — quiet typography inside the item dossier. */
+.item-comments { margin-top:30px; }
+.item-comments>h3 { display:flex; align-items:center; gap:10px; margin-bottom:16px; font-size:15px; font-weight:600; }
+.item-comments>h3 .count { padding:2px 7px; border:1px solid var(--line); color:var(--muted); font:12px/1.4 Bahnschrift,'Segoe UI',sans-serif; }
+.comment-login { display:flex; align-items:center; justify-content:space-between; gap:14px; min-height:72px; padding:16px; border:1px solid var(--line); background:var(--canvas); color:var(--muted); font-size:12px; line-height:1.5; }
+.comment-login button { min-height:36px; padding:8px 16px; border:1px solid var(--paper); border-radius:0; background:var(--paper); color:var(--paper-ink); font-size:12px; }
+.comment-login button:hover { background:var(--accent); border-color:var(--accent); }
+.comment-form { display:grid; gap:12px; padding:16px; border:1px solid var(--line); border-radius:0; background:var(--canvas); }
+.comment-identity { display:flex; align-items:center; gap:8px; color:var(--ink); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.comment-identity::before { content:''; width:4px; height:4px; flex:none; background:var(--accent); }
+.comment-identity svg { width:14px; height:14px; }
+.comment-form input,.comment-form textarea {
+  box-sizing:border-box; width:100%; padding:12px 13px; border:1px solid #ffffff24; border-radius:0;
+  background:var(--panel); color:var(--ink); font:inherit; font-size:14px;
+  transition:border-color .2s,background .2s;
+}
+.comment-form>input { max-width:220px; }
+.comment-form input::placeholder,.comment-form textarea::placeholder { color:var(--muted); opacity:.75; }
+.comment-form input:hover,.comment-form textarea:hover { border-color:#ffffff45; }
+.comment-form input:focus,.comment-form textarea:focus { border-color:var(--accent); outline:2px solid var(--accent); outline-offset:2px; background:var(--canvas); }
+.comment-form textarea { resize:vertical; min-height:108px; max-height:280px; line-height:1.7; }
+.comment-form-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; min-height:36px; color:var(--muted); font-size:12px; }
+.comment-form-actions [data-comment-message] { flex:1; min-width:0; color:var(--accent); line-height:1.6; overflow-wrap:anywhere; }
+.comment-form-actions [data-comment-length] { margin-left:auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.comment-form-actions button { min-height:36px; padding:8px 20px; border:1px solid var(--paper); border-radius:0; background:var(--paper); color:var(--paper-ink); font-size:12px; }
+.comment-form-actions button:not(:disabled):hover { border-color:var(--accent); background:var(--accent); }
+.comment-trap { position:absolute!important; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); pointer-events:none; }
+.comment-list { margin-top:12px; transition:opacity .2s; }
+.comment-list[aria-busy=true] { opacity:.55; }
+.player-comment { padding:20px 0; border-bottom:1px solid var(--line); }
+.player-comment header { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px; line-height:1.5; }
+.player-comment header strong { max-width:100%; color:var(--ink); font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.player-comment time { margin-left:auto; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.comment-market { padding:1px 5px; border:1px solid var(--line); border-radius:0; background:transparent; color:var(--muted); font-size:12px; white-space:nowrap; }
+.player-comment p { margin:11px 0 0; color:var(--ink); font-size:14px; line-height:1.85; white-space:pre-wrap; overflow-wrap:anywhere; }
+.comment-empty { margin:0; padding:26px 0; color:var(--muted); font-size:12px; line-height:1.6; text-align:center; }
+.comment-retry { width:100%; min-height:44px; padding:12px; border:1px solid var(--line); border-radius:0; background:transparent; color:var(--muted); font:inherit; font-size:12px; line-height:1.6; cursor:pointer; }
+.comment-retry:hover { color:var(--ink); border-color:var(--accent); background:var(--accent-soft); }
+.comment-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:16px; color:var(--muted); font-size:12px; }
+.comment-pagination[hidden],.comment-page-message[hidden] { display:none; }
+.comment-pagination button { min-height:36px; padding:8px 12px; border:1px solid var(--line); border-radius:0; background:transparent; color:var(--ink); font-size:12px; white-space:nowrap; }
+.comment-pagination button:not(:disabled):hover { border-color:var(--paper); background:var(--paper); color:var(--paper-ink); }
+.comment-pagination>span { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.comment-page-message { margin:12px 0 0; color:var(--accent); font-size:12px; line-height:1.6; }
+.item-comments button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+@media(max-width:560px) {
+  .comment-form { padding:13px; }
+  .comment-login { padding:14px; }
+  .player-comment { padding:18px 0; }
+  .comment-pagination { gap:8px; }
+  .comment-pagination button { padding:8px 10px; }
+}
+@media(max-width:380px) {
+  .player-comment header { gap:6px; }
+  .player-comment time { font-size:12px; }
+  .comment-form-actions [data-comment-message]:not(:empty) { flex-basis:100%; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .comment-form input,.comment-form textarea,.comment-list,.item-comments button { transition:none; }
+}
+
+/* Existing shared card and administration rules. */
+.admin-tabs{display:flex;gap:7px;margin-bottom:16px}.admin-tabs button{padding:9px 17px}.admin-tabs button[aria-pressed=true]{color:#121619;background:#dfc181;border-color:#dfc181}.moderation-toolbar{display:flex;gap:10px;align-items:center;padding:15px;border-bottom:1px solid var(--line)}.moderation-toolbar input{flex:1;min-width:0}.moderation-comment{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:15px;padding:18px;border-bottom:1px solid var(--line)}.moderation-comment header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.moderation-comment p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.7;margin:9px 0}.moderation-comment small{font-size:11px;color:var(--muted)}.moderation-comment [data-moderate]{align-self:center}.moderation-comment.is-hidden{opacity:.55}.moderation-comment .comment-item{color:var(--muted);font-size:12px}.moderation-footer{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;font-size:12px;color:var(--muted)}
+@media(max-width:560px){.trade-summary{gap:8px}.trade-summary span{font-size:11px}.trade-summary b{font-size:13px}.moderation-comment{grid-template-columns:minmax(0,1fr)}.moderation-comment [data-moderate]{justify-self:end}.player-level-setting{margin-bottom:15px}.metrics.metrics-trade{gap:8px}}
+.card-tail button[data-open]{width:auto;white-space:nowrap}

@@ -24,8 +24,7 @@ const duration=seconds=>seconds>=3600?`${Math.floor(seconds/3600)}时${Math.ceil
 const paths={
  list:'<path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/>',
  search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>',
- pause:'<path d="M8 5v14M16 5v14"/>',play:'<path d="m8 5 11 7-11 7Z"/>',expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
- moon:'<path d="M20 14A8.5 8.5 0 0 1 10 4a8.5 8.5 0 1 0 10 10Z"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/>',
+ expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
  sliders:'<path d="M4 6h5m4 0h7M4 12h9m4 0h3M4 18h2m4 0h10M9 3v6m4 0V3m0 6v6m4-6v6M6 15v6m4-6v6"/>',
  filter:'<path d="M3 4h18l-7 8v7l-4 2v-9Z"/>',star:'<path d="m12 3 2.8 5.6L21 9.5l-4.5 4.4 1 6.1-5.5-2.9L6.5 20l1-6.1L3 9.5l6.2-.9Z"/>',
  backpack:'<path d="M8 6V4a4 4 0 0 1 8 0v2M6 7h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><path d="M7 12h10v6H7Z"/>',
@@ -75,7 +74,7 @@ const state={
  views:Object.fromEntries(Object.keys(MARKETS).map(k=>[k,safeView(saved.views?.[k])])),favorites:{},
  workspaceViews:Object.fromEntries(Object.keys(MARKETS).map(m=>[m,Object.fromEntries(Object.entries(migrateWorkspaceViews(saved,m)).map(([k,v])=>[k,safeView(v)]))])),
  density:saved.density==='compact'?'compact':'standard',
- theme:['light','dark'].includes(saved.theme)?saved.theme:'dark',paused:false
+ theme:'dark'
 };
 for(const market of Object.keys(MARKETS)){
   state.favorites[market]=safeIds(saved.favorites?.[market]);
@@ -102,7 +101,7 @@ function applyAccountSettings(p){
     state.workspaceViews[m]=Object.fromEntries(Object.entries(migrateWorkspaceViews(p,m)).map(([k,v])=>[k,safeView(v)]));
     for(const v of Object.values(state.workspaceViews[m]))v.includeEvents=state.views[m].includeEvents;
   }
-  state.theme=p.theme==='light'?'light':'dark';state.density=p.density==='compact'?'compact':'standard';
+  state.theme='dark';state.density=p.density==='compact'?'compact':'standard';
   syncControls();rebuild();render(true);
   if(data&&$('#settings').open)renderProfileInputs(state.profiles[state.market]);
   if(detailRow){const row=detailRow;openDetail(row.id);}
@@ -135,7 +134,7 @@ function syncControls(){
   $$('button[data-page]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.page===state.page)));
   syncWorkspace();
   $$('[data-market]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.market===state.market)));
-  document.documentElement.dataset.theme=state.theme;$('#theme').innerHTML=icon(state.theme==='light'?'moon':'sun');
+  document.documentElement.dataset.theme='dark';
   motion.nav();
 }
 function rebuild(){
@@ -254,7 +253,7 @@ function quicklookTile(r,cell,index){
   const packCount=i.types.includes('ammoBox')?(i.containsItems||[]).reduce((sum,p)=>sum+p.count,0):0;
   const name=(cell.group==='lookup'?i.name:i.shortName||i.name)+(packCount?' ×'+packCount:'');
   return `<button class="quicklook-tile ${tone} tier-${cell.tier}${cell.w>=cell.h*1.35?' cloud-wide':''}${old!==undefined&&old!==r.slotValue?' quote-changed':''}" data-open="${esc(r.id)}" data-cloud-id="${esc(r.id)}" data-cloud-group="${cell.group}" style="grid-column:${cell.x+1}/span ${cell.w};grid-row:${cell.y+1}/span ${cell.h};--order:${Math.min(index,12)}" aria-label="${esc(i.name)}，单格净值 ${fmt(r.slotValue)} 卢布，查看明细" title="${esc(i.name)} · 净利/格 ₽${fmt(r.slotValue)}">
-    <span class="cloud-art">${image(cell.tier==='large'?(i.art||i.image):i.image,'','cloud-image',cell.tier==='large'?i.image:i.art)}</span>
+    <span class="cloud-art">${image(i.art,'','cloud-image')}</span>
     <span class="cloud-caption"><span class="cloud-name">${esc(name)}</span><span class="cloud-value"><strong>${amount}</strong><span>${unit}</span></span></span>
   </button>`;
 }
@@ -366,20 +365,19 @@ function renderFilterSummary(){
   $('#active-filters').hidden=!chips.length;$('#active-filters').innerHTML=chips.map(([key,label])=>`<button data-clear-filter="${key}" aria-label="移除${esc(label)}筛选">${esc(label)}${icon('x')}</button>`).join('');
 }
 
-function reading(){return state.paused||$('dialog[open]')||Date.now()-lastInteraction<1500;}
+function reading(){return $('dialog[open]')||Date.now()-lastInteraction<1500;}
 function updateStatus(){if(data)$('#status').textContent='获取 '+new Date(data.fetchedAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});}
 function warning(message){$('#warning').hidden=!message;$('#warning').textContent=message||'';$('#connection-dot').classList.toggle('offline',Boolean(message));}
 function queueApply(){
   clearTimeout(applyTimer);
   const pending=Boolean(pendingSnapshot||pendingSignals);$('#pending').hidden=!pending;
   if(!pending){updateWindow.clear();return;}
-  updateWindow.start();updateWindow.setPaused(state.paused);
+  updateWindow.start();
   const left=updateWindow.remaining();
-  if(!state.paused&&left<=0){applyPending();return;}
-  $('#pending-countdown').textContent=state.paused?'自动更新已暂停':`${Math.ceil(left/1000)} 秒后自动更新`;
+  if(left<=0){applyPending();return;}
+  $('#pending-countdown').textContent=`${Math.ceil(left/1000)} 秒后自动更新`;
   $('#pending').style.setProperty('--remaining',String(left/updateDelay));
-  $('#pending').classList.toggle('is-paused',state.paused);
-  if(!state.paused)applyTimer=setTimeout(queueApply,Math.min(1000,left));
+  applyTimer=setTimeout(queueApply,Math.min(1000,left));
 }
 function applyPending(){
   clearTimeout(applyTimer);updateWindow.clear();
@@ -598,12 +596,12 @@ function showFilters(){
   $('#min-slot-field').hidden=mod!=='loot'||quick;
   motion.open($('#filters'));
 }
-function exportSettings(){const blob=new Blob([JSON.stringify({version:4,...state,paused:false},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function exportSettings(){const blob=new Blob([JSON.stringify({version:4,...state},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='loot-radar-settings.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function importSettings(file){
   try{if(!file||file.size>512000)throw new Error('请选择小于500KB的设置文件');const p=JSON.parse(await file.text());if(![2,3,4].includes(p.version)||!p.profiles)throw new Error('不是本应用的设置备份');
     for(const m of Object.keys(MARKETS)){state.profiles[m]=normalizeProfile(p.profiles[m]);state.favorites[m]=safeIds(p.favorites?.[m]);state.workspaceViews[m]=Object.fromEntries(Object.entries(migrateWorkspaceViews(p,m)).map(([k,v])=>[k,safeView(v)]));state.views[m]=safeView(p.views?.[m]);}
     for(const m of Object.keys(MARKETS)){for(const v of Object.values(state.workspaceViews[m]))Object.assign(v,{includeEvents:state.views[m].includeEvents});}
-    if(['light','dark'].includes(p.theme))state.theme=p.theme;if(['standard','compact'].includes(p.density))state.density=p.density;
+    if(['standard','compact'].includes(p.density))state.density=p.density;
     persist();syncControls();rebuild();render(true);closePanel($('#settings'),'cancel');toast('已导入角色条件、显示偏好与收藏。');
   }catch(error){toast('导入失败：'+error.message);}
 }
@@ -651,12 +649,9 @@ $('#search').addEventListener('input',e=>{view().search=e.target.value;limit.loo
 $('#search-clear').addEventListener('click',()=>{clearTimeout(searchTimer);view().search='';$('#search').value='';limit.loot=40;render();persist();$('#search').focus();});
 $('#search').addEventListener('keydown',e=>{if(e.key==='Escape'&&view().search){e.preventDefault();$('#search-clear').click();}});
 $('#refresh').addEventListener('click',()=>refresh(true));$('#apply-pending').addEventListener('click',applyPending);
-$('#pause').addEventListener('click',()=>{state.paused=!state.paused;$('#pause').setAttribute('aria-pressed',String(state.paused));$('#pause').innerHTML=icon(state.paused?'play':'pause');const label=state.paused?'恢复自动应用行情':'暂停自动应用行情';$('#pause').setAttribute('aria-label',label);$('#pause').title=label;toast(state.paused?'自动更新已暂停':'自动更新已恢复');queueApply();});
-$('#theme').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';syncControls();persist();});
 $('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('当前窗口不支持全屏，可放大浏览器窗口。');}});
 $('#priority-info').addEventListener('click',()=>showInfo('排序优先级',`<p class="priority-weights">${Object.entries({availability:'常见程度',value:'单格价值',short:'短期涨价'}).map(([key,label])=>`<span>${label} <b>${Math.round(PRIORITY_WEIGHTS[key]*100)}%</b></span>`).join(' · ')}</p><p>≥${fmt(RUN_MIN_VALUE/10000)}万 / 格</p>`));
 $('#settings-button').addEventListener('click',showSettings);$('#filter-button').addEventListener('click',showFilters);
-$('#motion-preference').addEventListener('click',motion.toggle);
 $('#density-button').addEventListener('click',()=>{state.density=state.density==='standard'?'compact':'standard';syncControls();if(inCloud()&&data)renderQuicklook();persist();});
 $('#profile-form').addEventListener('submit',e=>{
   e.preventDefault();if(e.submitter?.value!=='save'){closePanel($('#settings'));return;}
