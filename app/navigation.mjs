@@ -1,6 +1,9 @@
 export const PAGES = ['items','run','flips','crafts'];
 export const moduleForPage = page => page === 'items' || page === 'run' ? 'loot' : page;
 export const supportsSurgeFilter = page => page === 'items';
+export const QUICKLOOK_PRESETS=Object.freeze({keys:{types:['keys']},mods:{types:['mods']},ammo:{types:['ammoBox']}});
+export const activeRunTypes=view=>QUICKLOOK_PRESETS[view.quicklookPreset]?.types||view.quicklookTypes;
+export const toggleRunPreset=(view,key)=>Object.hasOwn(QUICKLOOK_PRESETS,key)?{...view,quicklookPreset:view.quicklookPreset===key?null:key}:view;
 
 export function resolvePage(requested, saved, market) {
   const page = requested || saved.page;

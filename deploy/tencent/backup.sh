@@ -12,7 +12,7 @@ if (( ${#files[@]} > 0 )); then
     tar -czf "$archive.partial" -C /var/lib/tarkov-radar/ledger -- "${files[@]}"
     mv -- "$archive.partial" "$archive"
 fi
-# These files contain manual classifications and the password hash, not plaintext.
+# Private admin settings include the SMTP authorization secret; keep this archive private.
 if [[ -d /var/lib/tarkov-radar/admin ]]; then
     mapfile -d '' admin_files < <(find /var/lib/tarkov-radar/admin -maxdepth 1 -type f -name '*.json' -printf '%P\0')
     if (( ${#admin_files[@]} > 0 )); then
@@ -21,5 +21,15 @@ if [[ -d /var/lib/tarkov-radar/admin ]]; then
         mv -- "$admin_archive.partial" "$admin_archive"
     fi
 fi
+if [[ -f /var/lib/tarkov-radar/community/comments.sqlite ]]; then
+    /opt/tarkov-radar/node/bin/node /opt/tarkov-radar/current/scripts/backup-comments.mjs \
+        /var/lib/tarkov-radar/community/comments.sqlite "$destination/comments-$stamp.sqlite"
+fi
+if [[ -f /var/lib/tarkov-radar/community/accounts.sqlite ]]; then
+    /opt/tarkov-radar/node/bin/node /opt/tarkov-radar/current/scripts/backup-comments.mjs \
+        /var/lib/tarkov-radar/community/accounts.sqlite "$destination/accounts-$stamp.sqlite"
+fi
+find "$destination" -maxdepth 1 -type f -name 'accounts-*.sqlite' -mtime +14 -delete
+find "$destination" -maxdepth 1 -type f -name 'comments-*.sqlite' -mtime +14 -delete
 find "$destination" -maxdepth 1 -type f -name 'ledger-*.tar.gz' -mtime +14 -delete
 find "$destination" -maxdepth 1 -type f -name 'admin-*.tar.gz' -mtime +14 -delete

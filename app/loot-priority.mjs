@@ -1,10 +1,12 @@
 import {SPT_SOURCE,SPT_GROUPS} from './spt-rarity.mjs';
 export {SPT_SOURCE};
 const rarityById=new Map(Object.entries(SPT_GROUPS).flatMap(([rarity,ids])=>ids.map(id=>[id,rarity])));
-const grades={Common:{key:'Common',label:'常见',availability:1},Rare:{key:'Rare',label:'稀有',availability:.55},Superrare:{key:'Superrare',label:'超稀有',availability:.15},Unknown:{key:'Unknown',label:'未收录',availability:.5}};
+const grades={Common:{key:'Common',label:'常见',availability:1},Rare:{key:'Rare',label:'稀有',availability:.45},Superrare:{key:'Superrare',label:'超稀有',availability:.2},Unknown:{key:'Unknown',label:'未收录',availability:.2}};
 export const PRIORITY_WEIGHTS=Object.freeze({value:.4,availability:.5,short:.1});
 export const RUN_VALUE_CAP=1000000;
 export const RUN_MIN_VALUE=30000;
+// Only the run filter can bypass the sale level; bans and facility fees always apply.
+export const runValuationOptions=(options={},ignoreFleaLevel=true)=>({...options,...(ignoreFleaLevel?{playerLevel:undefined}:{})});
 export const qualifiesForRun=row=>Number.isFinite(row.slotValue)&&row.slotValue>=RUN_MIN_VALUE;
 export function itemRarity(item={}){
   if(Object.hasOwn(grades,item.rarityOverride))return grades[item.rarityOverride];
@@ -21,5 +23,7 @@ export function lootPriority(row,signal={}){
   return 100*(PRIORITY_WEIGHTS.value*value+PRIORITY_WEIGHTS.availability*availability+PRIORITY_WEIGHTS.short*short);
 }
 export function compareLootPriority(a,b){
-  return b.quicklookScore-a.quicklookScore || b.slotValue-a.slotValue || a.id.localeCompare(b.id);
+  const commonA=isCommonFind(a),commonB=isCommonFind(b);
+  return Number(commonB)-Number(commonA) || (commonA?b.quicklookScore-a.quicklookScore:0) || b.slotValue-a.slotValue || a.id.localeCompare(b.id);
 }
+export const isCommonFind=row=>itemRarity(row.item).key==='Common';

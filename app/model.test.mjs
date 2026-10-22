@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SCAVENGING_CATEGORIES, SCAVENGING_SELECTION_VERSION, migrateScavengingCategories } from './model.mjs';
+import { DEFAULT_SCAVENGING_CATEGORIES, SCAVENGING_SELECTION_VERSION, migrateScavengingCategories, CATEGORY_METADATA_VERSION, applyCategoryMetadata } from './model.mjs';
+import {runValuationOptions,qualifiesForRun,lootPriority} from './loot-priority.mjs';
 import { applyEventMetadata, EVENT_METADATA_VERSION, fleaFee, feeBasePrice, lowOfferCount, isShortOpportunity, isPriceOpportunity, summarizeHistory, analyzeHistorySummary, mergeRecentQuotes, normalizeSnapshot, categoryOf, collectLoot, collectCatalog, filterCatalog, collectFlips, collectCrafts, analyzeHistory, quoteStatus, normalizeProfile, resolvePlayerProfile, resolveTradingProfile, tradingTraders, productionStations, hasFullProgress, isScavengingItem, scavengingCategory, SCAVENGING_CATEGORIES, normalizeScavengingCategories, procurement, scenario, profitStability } from './model.mjs';
 const now = Date.parse('2026-10-20T16:00:00Z');
 const flea = { enabled: true, minPlayerLevel: 15, foundInRaidRequired: false, sellOfferFeeRate: .05, sellRequirementFeeRate: .05 };
@@ -9,17 +10,123 @@ const item = (id, patch = {}) => ({
   offers: 10, scan: new Date(now - 600000).toISOString(), width: 1, height: 1, stack: 1, fleaLevel: 15,
   buy: [], sell: [{ trader: 't', priceRUB: 30000 }], ...patch
 });
-const dataset = (items, patch = {}) => ({ market:'pve', flea, items:Object.fromEntries(items.map(i=>[i.id,i])), traders:{t:{name:'prapor'}}, stations:{s:{name:'工作台'}}, barters:[], crafts:[], ...patch });
+const dataset = (items, patch = {}) => ({ market:'pve', flea, items:Object.fromEntries(items.map(i=>[i.id,i])), traders:{t:{id:'t',name:'prapor'}}, stations:{s:{id:'s',name:'工作台'}}, barters:[], crafts:[], ...patch });
 test('fee uses supplied market parameters, count and explicit intelligence setting',()=>{
   assert.equal(fleaFee(100000,100000,flea),10000);
   assert.equal(fleaFee(100000,100000,flea,0,0,60),600000);
   assert.equal(fleaFee(100000,100000,flea,3,0),7000);
   assert.equal(fleaFee(0,100000,flea),null);
 });
+test('money case profit subtracts procurement and tax once, not twice',()=>{
+  const box=item('59fb016586f7746d0d4b423a',{name:'钱箱',basePrice:398201,price:1588888,average:1588888,fleaLevel:25,buy:[{trader:'t',priceRUB:699999,currency:'RUB',minTraderLevel:4}]});
+  const [row]=collectFlips(dataset([box]),normalizeProfile({playerLevel:79}),now);
+  assert.equal(row.purchase,699999);assert.equal(row.fee,129810);assert.equal(row.net,1459078);assert.equal(row.profit,759079);
+  assert.equal(row.profit,row.item.price-row.purchase-row.fee);
+});
+test('player level survives configuration and gates each item even with full facility defaults',()=>{
+  const locked=item('a',{fleaLevel:25,buy:[{trader:'t',priceRUB:10000,currency:'RUB'}]}),data=dataset([locked]);
+  const low=resolveTradingProfile({playerLevel:24},data),open=resolveTradingProfile({...low,playerLevel:25},data);
+  assert.equal(resolveTradingProfile(low,data).playerLevel,24);
+  assert.equal(quoteStatus(locked,data,{maxProgress:true,playerLevel:24},now),'等级不足');
+  assert.equal(collectLoot(data,low,now)[0].channel,'prapor');
+  assert.equal(collectLoot(data,open,now)[0].channel,'跳蚤');
+  assert.equal(collectFlips(data,{...low,includeUnavailable:true},now)[0].profit,20000);
+  assert(collectFlips(data,open,now)[0].profit>0);
+  assert.equal(resolveTradingProfile({},data).playerLevel,79);
+  assert.equal(resolveTradingProfile(low,data,true).playerLevel,79);
+});
+
+test('level-locked items keep a taxed flea comparison without using it for actual returns',()=>{
+  const data=dataset([item('locked',{fleaLevel:25}),item('other',{price:60000,average:60000})]);
+  const low=collectLoot(data,{playerLevel:24},now),open=collectLoot(data,{playerLevel:25},now);
+  const locked=low.find(r=>r.id==='locked');
+  assert.equal(locked.channel,'prapor');assert.equal(locked.net,30000);assert.equal(locked.slotValue,30000);
+  assert.equal(locked.fleaNet,null);assert.equal(locked.fee,null);assert.equal(locked.fleaReferenceNet,90000);
+  assert.equal(locked.traderNet-locked.fleaReferenceNet,-60000);
+  assert.equal(low[0].id,'other');assert.equal(open[0].id,'locked');
+  const globalLock=collectLoot(dataset([item('base',{fleaLevel:1})]),{playerLevel:14},now)[0];
+  assert.equal(globalLock.channel,'prapor');assert.equal(globalLock.status,'等级不足');
+  for(const patch of [{types:['noFlea']},{scan:null},{offers:0},{price:null}]){
+    const [r]=collectLoot(dataset([item('invalid',{fleaLevel:25,...patch})]),{playerLevel:24},now);
+    assert.equal(r.fleaReferenceNet,null);
+  }
+});
+
+test('run references ignore player level without changing other views, bans, events or facility fees',()=>{
+  const locked=item('locked',{fleaLevel:25,sell:[{trader:'t',priceRUB:5000}]}),
+    banned=item('banned',{types:['noFlea'],price:1000000,average:1000000,sell:[{trader:'t',priceRUB:45000}]}),
+    event=item('event',{eventOnly:true});
+  const data=dataset([locked,banned,event]);
+  const profile=Object.freeze({playerLevel:14,intelligence:0,includeEvents:false});
+  const runOptions=runValuationOptions(profile),run=collectLoot(data,runOptions,now),actual=collectLoot(data,profile,now);
+  assert.deepEqual(collectLoot(data,runValuationOptions(profile,false),now),actual);
+  const r=run.find(r=>r.id==='locked'),a=actual.find(r=>r.id==='locked');
+  assert.equal(profile.playerLevel,14);assert.equal(profile.intelligence,0);
+  assert.equal(a.net,5000);assert.equal(a.channel,'prapor');assert.equal(qualifiesForRun(a),false);
+  assert.equal(r.net,90000);assert.equal(r.fee,10000);assert.equal(r.channel,'跳蚤');assert.equal(qualifiesForRun(r),true);
+  assert.deepEqual(run,collectLoot(data,runValuationOptions({...profile,playerLevel:79}),now));
+  assert.equal(lootPriority(r),lootPriority(collectLoot(data,runValuationOptions({...profile,playerLevel:24}),now).find(r=>r.id==='locked')));
+  assert.equal(collectCatalog(data,runOptions,now).find(r=>r.id==='locked').net,r.net);
+  assert.equal(run.find(r=>r.id==='banned').net,45000);assert.equal(run.find(r=>r.id==='banned').fleaNet,null);
+  assert.equal(run.some(r=>r.id==='event'),false);
+  assert.equal(collectLoot(data,runValuationOptions({...profile,includeEvents:true}),now).some(r=>r.id==='event'),true);
+  const closed=collectLoot({...data,flea:{...flea,enabled:false}},runOptions,now).find(r=>r.id==='locked');
+  assert.equal(closed.net,5000);assert.equal(closed.fleaNet,null);
+  const points=Array.from({length:26},(_,n)=>({priceMin:100000,timestamp:now-(n+1)*86400000,offerCount:20}));
+  assert.equal(analyzeHistory(points,locked,data,profile,now).long,false);
+  assert.equal(analyzeHistory(points,locked,data,runOptions,now).long,true);
+  assert.equal(analyzeHistory(points,locked,data,runValuationOptions(profile,false),now).long,false);
+});
+
+test('low-level flips and crafts show merchant profit, including losses, and unlock at the exact level',()=>{
+  const product=item('product',{fleaLevel:25,buy:[{trader:'t',priceRUB:40000,currency:'RUB',minTraderLevel:1}]}),
+    material=item('material',{price:10000,average:10000,basePrice:10000});
+  const data=dataset([product,material],{crafts:[{id:'c',station:'s',level:1,duration:3600,productItem:{item:'product',count:2},requiredItems:[{item:'material',count:8}]}]});
+  const low={playerLevel:24,maxProgress:true,includeLosses:true,includeUnavailable:true,onlyExecutable:true};
+  const [flip]=collectFlips(data,low,now),[craft]=collectCrafts(data,low,now);
+  assert.equal(flip.channel,'prapor');assert.equal(flip.net,30000);assert.equal(flip.profit,-10000);assert.equal(flip.fee,null);
+  assert.equal(craft.channel,'prapor');assert.equal(craft.net,60000);assert.equal(craft.profit,-20000);assert.equal(craft.hourly,-20000);
+  assert.equal(flip.execution.executable,true);assert.equal(craft.execution.executable,true);
+  assert.equal(isPriceOpportunity(flip,{short:true}),false);assert.equal(isPriceOpportunity(craft,{short:true}),false);
+  const [unlocked]=collectFlips(data,{...low,playerLevel:25},now);
+  assert.equal(unlocked.channel,'跳蚤');assert.equal(unlocked.profit,50000);assert.equal(unlocked.fee,10000);
+  const noVendor=dataset([{...product,sell:[]}]);
+  assert.equal(collectFlips(noVendor,{...low,onlyExecutable:false},now)[0].profit,null);
+  assert.equal(collectFlips(noVendor,low,now).length,0);
+  const delayedData=dataset([product,{...material,scan:new Date(now-2*3600000).toISOString()}],{crafts:data.crafts});
+  const [delayedCraft]=collectCrafts(delayedData,{...low,allowDelayedTrades:true},now);
+  assert.equal(delayedCraft.status,'等级不足');
+});
 
 test('upstream wearable melee objects have their own weapon category',()=>{
   assert.equal(categoryOf({types:['wearable'],properties:{propertiesType:'ItemPropertiesMelee'}}),'melee');
   assert.equal(categoryOf({types:['wearable','backpack'],properties:{}}),'gear');
+});
+
+test('storage containers take precedence over barter while ammunition packs stay separate',()=>{
+  const objects=[
+    {id:'case',types:['barter','container','markedOnly']},
+    {id:'wallet',types:['container','barter']},
+    {id:'pack',types:['ammoBox','barter']},
+    {id:'bolt',types:['barter']}
+  ];
+  const data=normalizeSnapshot({items:{data:{items:Object.fromEntries(objects.map(i=>[i.id,i])),fleaMarket:flea}},traders:{data:{}},hideout:{data:{}},barters:{data:[]},crafts:{data:[]}},'pve');
+  assert.deepEqual(Object.values(data.items).map(i=>i.category),['containers','containers','ammo','barter']);
+  assert.equal(scavengingCategory(data.items.case),'containers');
+  assert.equal(isScavengingItem(data.items.case),false);
+  assert.equal(isScavengingItem(data.items.case,['containers']),true);
+  assert.equal(isScavengingItem(data.items.case,['ammoBox']),false);
+  assert.equal(scavengingCategory(data.items.pack),'ammoBox');
+  assert.equal(isScavengingItem(data.items.pack,['ammoBox']),true);
+  const old={...data,categoryMetadataVersion:1,items:{...data.items,case:{...data.items.case,category:'barter'}}};
+  const upgraded=applyCategoryMetadata(old);
+  assert.equal(upgraded.categoryMetadataVersion,CATEGORY_METADATA_VERSION);
+  assert.equal(upgraded.items.case.category,'containers');
+  assert.equal(old.items.case.category,'barter');
+  assert.equal(upgraded.items.pack,old.items.pack);
+  assert.equal(upgraded.items.bolt,old.items.bolt);
+  assert.equal(applyCategoryMetadata(upgraded),upgraded);
+  assert.equal(upgraded.fetchedAt,old.fetchedAt);
 });
 
 test('trader presets use the standard complete weapon price, never the receiver or attachment resale',()=>{
@@ -88,7 +195,7 @@ test('all offers retains unknown-price and unknown-cost routes without inventing
 test('trading settings retain chosen facility levels, traders, tasks and production choices',()=>{
   const data=dataset([],{traders:{t:{id:'t',slug:'mechanic',levels:[{level:4}]},npc:{id:'npc',slug:'lightkeeper',levels:[{level:1}]}},stations:{s:{id:'s',slug:'workbench',maxLevel:3},wall:{id:'wall',slug:'defective-wall',maxLevel:6}},crafts:[{station:'s',duration:60}]});
   const p=resolveTradingProfile({maxProgress:false,progressConfigured:true,playerLevel:5,stationLevels:{s:1},traderLevels:{t:2},completedTasks:[],management:20,materialMode:'owned',edition:'unheard_edition',excludedStations:['s']},data);
-  assert.equal(p.playerLevel,79);assert.equal(p.stationLevels.s,1);assert.equal(p.stationLevels.wall,6);assert.equal(p.intelligence,3);assert.equal(p.materialMode,'buy');assert.equal(p.edition,'');
+  assert.equal(p.playerLevel,5);assert.equal(p.stationLevels.s,1);assert.equal(p.stationLevels.wall,6);assert.equal(p.intelligence,3);assert.equal(p.materialMode,'buy');assert.equal(p.edition,'');
   assert.equal(p.traderLevels.t,2);assert.equal(p.management,0);assert.deepEqual(p.excludedStations,['s']);
   assert.deepEqual(tradingTraders(data).map(t=>t.id),['t']);assert.deepEqual(productionStations(data).map(s=>s.id),['s']);
 });
@@ -103,13 +210,38 @@ test('saved production levels survive reload and control recipes and intelligenc
   const custom=resolveTradingProfile({...full,stationLevels:{s:1,intel:0}},data);
   const reloaded=resolveTradingProfile(JSON.parse(JSON.stringify(custom)),data);
   assert.deepEqual(reloaded.stationLevels,{s:1,intel:0});assert.equal(reloaded.intelligence,0);
-  const locked=collectCrafts(data,reloaded,now)[0];
-  assert.deepEqual(locked.execution.missing,['工作台 Lv.2']);assert.ok(locked.fee>fullCraft.fee);
+  assert.equal(collectCrafts(data,reloaded,now).length,0);
   assert.equal(collectCrafts(data,{...reloaded,onlyExecutable:true},now).length,0);
-  assert.equal(collectCrafts(data,{...resolveTradingProfile({...custom,stationLevels:{s:2,intel:0}},data),onlyExecutable:true},now).length,1);
+  const unlocked=collectCrafts(data,{...resolveTradingProfile({...custom,stationLevels:{s:2,intel:0}},data),onlyExecutable:true},now);
+  assert.equal(unlocked.length,1);assert.ok(unlocked[0].fee>fullCraft.fee);
   const reset=resolveTradingProfile({...custom,excludedStations:['s']},data,true);
   assert.deepEqual(reset.stationLevels,{s:3,intel:3});assert.equal(reset.intelligence,3);assert.deepEqual(reset.excludedStations,[]);
   assert.deepEqual(resolveTradingProfile({...custom,stationLevels:{s:9,intel:1.7}},data).stationLevels,{s:3,intel:1});
+});
+
+test('trader and facility level gates hide unavailable routes even when executable-only is off',()=>{
+  const product=item('product',{buy:[1,2,4].map(level=>({trader:'t',priceRUB:40000,currency:'RUB',minTraderLevel:level}))}),
+    material=item('material',{price:10000,average:10000});
+  const base=dataset([product,material],{
+    traders:{t:{id:'t',name:'Mechanic',levels:[{level:1},{level:2},{level:3},{level:4}]}},
+    stations:{s:{id:'s',name:'工作台',maxLevel:3}},
+    barters:[1,2,4].map(level=>({id:'b'+level,trader:'t',minTraderLevel:level,offeredItem:{item:'product',count:1},requiredItems:[{item:'material',count:10}]})),
+    crafts:[1,2,3].map(level=>({id:'c'+level,station:'s',level,duration:3600,productItem:{item:'product',count:1},requiredItems:[{item:'material',count:10}]}))
+  });
+  for(const market of ['pve','regular','pvp-season']){
+    const data={...base,market};
+    for(const level of [0,1,2,3,4]){
+      const profile={maxProgress:false,progressConfigured:true,playerLevel:79,traderLevels:{t:level},stationLevels:{s:Math.min(level,3)},includeLosses:true,includeUnavailable:true,onlyExecutable:false};
+      const flips=collectFlips(data,profile,now),crafts=collectCrafts(data,profile,now);
+      assert.deepEqual(flips.filter(r=>!r.isBarter).map(r=>r.level).sort(),[1,2,4].filter(n=>n<=level));
+      assert.deepEqual(flips.filter(r=>r.isBarter).map(r=>r.level).sort(),[1,2,4].filter(n=>n<=level));
+      assert.deepEqual(crafts.map(r=>r.level).sort(),[1,2,3].filter(n=>n<=level));
+      assert.ok(crafts.every(r=>r.profit<0));
+      assert.equal(collectCatalog(data,profile,now).length,2);
+    }
+    const full={maxProgress:true,traderLevels:{t:0},stationLevels:{s:0},includeLosses:true};
+    assert.equal(collectFlips(data,full,now).length,6);assert.equal(collectCrafts(data,full,now).length,3);
+  }
 });
 test('normalization preserves every equipment category and resolves actual translations',()=>{
   const raw = [
@@ -125,7 +257,7 @@ test('normalization preserves every equipment category and resolves actual trans
   const data=normalizeSnapshot({items:{data:{items:Object.fromEntries(raw.map(i=>[i.id,i])),fleaMarket:flea}},items_zh:{data:{gun_name:'步枪'}},traders:{data:{}},hideout:{data:{}},barters:{data:[]},crafts:{data:[]}},'pve');
   assert.equal(data.items.gun.name,'步枪');
   assert.deepEqual(data.items.bolt.sourceCategories,['test-source-category']);
-  assert.equal(data.categoryMetadataVersion,1);
+  assert.equal(data.categoryMetadataVersion,CATEGORY_METADATA_VERSION);
   assert.deepEqual(Object.values(data.items).map(i=>i.category),['weapon','mods','keys','ammo','armor','medical','food','barter']);
 });
 test('noFlea and old quotes cannot inflate net value',()=>{
@@ -283,13 +415,13 @@ test('event switch preserves database records and never enables currencies',()=>
   assert.equal(Object.keys(data.items).length,3);
 });
 
-test('delayed trade estimates are explicit and never confirmed executable',()=>{
+test('quote age does not replace actual trading unlock conditions',()=>{
   const i=item('a',{scan:new Date(now-2*3600000).toISOString(),buy:[{trader:'t',priceRUB:30000,currency:'RUB',minTraderLevel:1}]});
   const data=dataset([i],{traders:{t:{id:'t',name:'商人'}}});
   const options={allowDelayedTrades:true,playerLevel:30,traderLevels:{t:4}};
   const [estimate]=collectFlips(data,options,now);
-  assert.equal(estimate.status,'报价延迟');assert.equal(estimate.execution.executable,false);
-  assert.equal(collectFlips(data,{...options,onlyExecutable:true},now).length,0);
+  assert.equal(estimate.status,'报价延迟');assert.equal(estimate.execution.executable,true);
+  assert.equal(collectFlips(data,{...options,onlyExecutable:true},now).length,1);
 });
 
 test('verified LL and quest unlocks are required before cheaper trader material costs',()=>{
@@ -319,7 +451,7 @@ test('negative craft outcomes remain measurable without operating fuel costs',()
 test('full progress defaults unlock procurement and recipes and apply maximum facility fee discount',()=>{
   const task='0123456789abcdef01234567',output=item('o'),m=item('m',{buy:[{trader:'t',priceRUB:10000,currency:'RUB',minTraderLevel:4,taskUnlock:task}]});
   const data=dataset([output,m],{crafts:[{id:'c',station:'s',duration:3600,level:3,taskUnlock:task,productItem:{item:'o',count:1},requiredItems:[{item:'m',count:1}]}]});
-  const profile=normalizeProfile({playerLevel:5,intelligence:0,fuelPerHour:100000});
+  const profile=normalizeProfile({playerLevel:79,intelligence:0,fuelPerHour:100000});
   assert.equal(profile.intelligence,3);assert.equal(profile.fuelPerHour,0);
   assert.equal(procurement(m,data,profile,now).cost,10000);
   const [r]=collectCrafts(data,{...profile,onlyExecutable:true},now);
@@ -477,6 +609,31 @@ test('one new elevated scan is visible as a lead but only independent scans conf
   assert.equal(analyzeHistorySummary(summary,i,data,{},now+10*60000).short,false);
   const later={...i,scan:new Date(now+20*60000).toISOString()};
   assert.equal(analyzeHistorySummary(summary,later,data,{},now+20*60000).short,true);
+});
+test('24h opportunities require a 30% price rise and a 20% net improvement',()=>{
+  const points=historyWeek(200000);
+  for(let hours=6;hours<=30;hours+=2)points.push({priceMin:100000,timestamp:now-hours*3600000,offerCount:12});
+  for(const price of [120000,125000,129999]){
+    const i=item('daily',{price}),s=analyzeHistory(points,i,dataset([i]),{},now);
+    assert.equal(s.short||s.watch,false);
+  }
+  const i=item('daily',{price:130000}),s=analyzeHistory(points,i,dataset([i]),{},now);
+  assert.equal(s.riseWindow,'24h');assert.equal(s.watch,true);
+  // A high trader floor can leave less than 20% actual improvement despite a 40% price rise.
+  const costly=item('daily',{price:140000,sell:[{trader:'t',priceRUB:110000}]});
+  const net=140000-fleaFee(100000,140000,flea);
+  assert.ok(net/110000>1.1&&net/110000<1.2);
+  assert.equal(analyzeHistory(points,costly,dataset([costly]),{},now).watch,false);
+});
+test('24h rises must clear a volatile upper range; weekly signals remain independent',()=>{
+  const points=historyWeek(200000);
+  for(let hours=6;hours<=30;hours+=2)points.push({priceMin:hours<=14?130000:100000,timestamp:now-hours*3600000,offerCount:12});
+  const nearPeak=item('daily',{price:140000}),s=analyzeHistory(points,nearPeak,dataset([nearPeak]),{},now);
+  assert.equal(s.priorDay,100000);assert.equal(s.short||s.watch,false);
+  const breakout=item('daily',{price:143000});
+  assert.equal(analyzeHistory(points,breakout,dataset([breakout]),{},now).riseWindow,'24h');
+  const weekly=item('weekly',{price:125000});
+  assert.equal(analyzeHistory(historyWeek(100000),weekly,dataset([weekly]),{},now).riseWindow,'7d');
 });
 test('low offers and delayed quotes remain unconfirmed, and expired quotes are not opportunities',()=>{
   const i=item('rise',{price:150000,average:150000}),data=dataset([i]);

@@ -29,3 +29,14 @@ outputs/
 /public/navigation.mjs
 /public/loot-priority.mjs
 /public/spt-rarity.mjs
+/public/media.mjs
+/public/community.css
+/public/comments-ui.js
+/public/accounts-ui.js
+/public/account-sync.mjs
+/public/accounts.css
+/public/client/
+/public/dashboard-client.mjs
+/public/row-cache.mjs
+/public/terminal.css
+/public/ui-motion.mjs

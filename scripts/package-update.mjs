@@ -1,0 +1,24 @@
+import {mkdir,mkdtemp,copyFile,readFile,writeFile,readdir,stat} from 'node:fs/promises';
+import {resolve,dirname,join,basename} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const date=process.argv[2]||'20261023';if(!/^\d{8}$/.test(date))throw new Error('Use YYYYMMDD');
+const output=resolve(process.argv[3]||join(root,'outputs',`tarkov-update-${date}.tar.gz`));
+await mkdir(join(root,'work'),{recursive:true});await mkdir(dirname(output),{recursive:true});
+const staging=await mkdtemp(join(root,'work','update-handoff-')),name=`tarkov-update-${date}`,bundle=join(staging,name);
+await mkdir(bundle);
+execFileSync(process.execPath,[join(root,'scripts/package-tencent.mjs'),join(bundle,'release.tar.gz')],{cwd:root,stdio:'inherit',windowsHide:true});
+await writeFile(join(bundle,'publish.sh'),(await readFile(join(root,'deploy/tencent/update.sh'),'utf8')).replace(/\r\n/g,'\n'));
+await writeFile(join(bundle,'更新说明.md'),(await readFile(join(root,'docs/releases/2026-10-23.md'),'utf8')).replace('../performance.md','性能记录.md'));
+await copyFile(join(root,'docs/performance.md'),join(bundle,'性能记录.md'));
+const commands=`塔科夫赚钱监控 · ${date} 更新包\n\n此包仅含程序，不含账号数据库、邮箱授权码或私钥。\n上传至 /home/ubuntu，按顺序执行：\n\ncd /home/ubuntu\nchmod 600 ${basename(output)}\numask 077\ntar -xzf ${basename(output)}\nsudo bash ${name}/publish.sh\n\n看到 DEPLOY_OK 与 ALL_CHECKS_PASSED 后访问：\nhttps://tarkovlootradar.lanluz.xin/\n\n安装器会先备份，再切换程序；核心检查失败会恢复旧程序。\n账号、评论、设置、邮箱配置、图片缓存与域名证书沿用服务器现有内容。\n备份目录含账号与私密配置，仅限自己保存。\n`;
+await writeFile(join(bundle,'执行说明.txt'),commands);
+const digest=body=>createHash('sha256').update(body).digest('hex');
+const files=await readdir(bundle);
+// The inner archive has its own full allowlist and SHA256SUMS.
+await writeFile(join(bundle,'BUNDLE-SHA256SUMS'),(await Promise.all(files.map(async file=>`${digest(await readFile(join(bundle,file)))}  ${file}`))).join('\n')+'\n');
+execFileSync('tar',['-czf',output,'-C',staging,name],{stdio:'inherit',windowsHide:true});
+const hash=digest(await readFile(output));await writeFile(output+'.sha256',`${hash}  ${basename(output)}\n`);
+console.log(JSON.stringify({archive:output,sha256:hash,bytes:(await stat(output)).size,source:bundle},null,2));

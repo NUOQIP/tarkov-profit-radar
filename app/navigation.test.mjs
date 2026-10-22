@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvePage,migrateWorkspaceViews,moduleForPage,PAGES} from './navigation.mjs';
+import {resolvePage,migrateWorkspaceViews,moduleForPage,PAGES,activeRunTypes,toggleRunPreset} from './navigation.mjs';
+import {normalizeAccountSettings} from './account-settings.mjs';
 test('old loot links resolve to the corresponding new page; direct item links remain valid',()=>{
   const saved={page:'loot',workspaceViews:{pve:{loot:{lootScope:'scavenging'}}}};
   assert.equal(resolvePage('loot',saved,'pve'),'run');
@@ -40,4 +41,25 @@ test('new independent views do not leak category/search across pages or markets'
   const saved={workspaceViews:{pve:{items:{category:'weapon',search:'SA58'},run:{quicklookTypes:['keys'],search:'钥匙'}},regular:{run:{search:'不同市场'}}}};
   const m=migrateWorkspaceViews(saved,'pve');assert.equal(m.items.search,'SA58');assert.equal(m.run.search,'钥匙');
   assert.equal(migrateWorkspaceViews(saved,'regular').run.search,'不同市场');
+});
+test('cycling presets and tapping the active preset restores the untouched custom filters',()=>{
+  const custom={quicklookTypes:['medical','food','poster'],quicklookPreset:null,ignoreFleaLevel:false,includeEvents:true,filter:'favorites',criteria:{onlyExecutable:false}};
+  const original=structuredClone(custom);
+  const ammo=toggleRunPreset(custom,'ammo');assert.deepEqual(activeRunTypes(ammo),['ammoBox']);
+  const keys=toggleRunPreset(ammo,'keys');assert.deepEqual(activeRunTypes(keys),['keys']);
+  const mods=toggleRunPreset(keys,'mods');assert.deepEqual(activeRunTypes(mods),['mods']);
+  assert.deepEqual(toggleRunPreset(mods,'mods'),custom);assert.deepEqual(custom,original);
+  assert.deepEqual(activeRunTypes({...ammo,quicklookPreset:null}),custom.quicklookTypes);
+});
+test('local reload, account sync and market switching preserve the base selection',()=>{
+  const pve=toggleRunPreset({quicklookTypes:['food','medical'],quicklookTypesRevision:3,ignoreFleaLevel:false},'ammo');
+  const saved=JSON.parse(JSON.stringify({workspaceViews:{pve:{run:pve},regular:{run:{quicklookTypes:['mods'],quicklookTypesRevision:3}}}}));
+  const restored=migrateWorkspaceViews(saved,'pve').run;
+  assert.deepEqual(activeRunTypes(restored),['ammoBox']);
+  assert.deepEqual(activeRunTypes(toggleRunPreset(restored,'ammo')),['food','medical']);
+  const synced=normalizeAccountSettings(saved);
+  assert.deepEqual(synced.workspaceViews.pve.run.quicklookTypes,['food','medical']);
+  assert.equal(synced.workspaceViews.pve.run.ignoreFleaLevel,false);
+  assert.deepEqual(synced.workspaceViews.regular.run.quicklookTypes,['mods']);
+  assert.equal(synced.workspaceViews.pve.run.quicklookPreset,undefined);
 });

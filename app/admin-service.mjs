@@ -32,7 +32,7 @@ function accessContext(req,{ip,secure},configuredOrigin){
   return {origin,secure};
 }
 const cookie=(token,secure,age=SESSION_MS/1000)=>`${COOKIE}=${token}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=${age}${secure?'; Secure':''}`;
-export function createAdminHandler(store,{credentialFile,origin,readCredential}={}){
+export function createAdminHandler(store,{credentialFile,origin,readCredential,comments,mail}={}){
   const sessions=new Map(),attempts=new Map();let globalAttempts={at:0,count:0};
   const credentials=readCredential||(async()=>{try{return JSON.parse(await readFile(credentialFile,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw e;}});
   return async(req,url,context)=>{
@@ -66,6 +66,22 @@ export function createAdminHandler(store,{credentialFile,origin,readCredential}=
       if(!['GET','HEAD'].includes(req.method)&&req.headers['x-csrf-token']!==session.csrf)return json({error:'页面验证已失效，请刷新后重试'},403);
       if(req.method==='POST'&&url.pathname==='/admin/api/logout'){
         sessions.delete(key);return json({ok:true},200,{'Set-Cookie':cookie('',transport.secure,0)});
+      }
+      if(url.pathname==='/admin/api/mail'&&mail){
+        if(req.method==='GET')return json(await mail.status());
+        if(req.method==='PUT')return json(await mail.save(await bodyJSON(req)));
+      }
+      if(url.pathname==='/admin/api/mail/verify'&&req.method==='POST'&&mail)return json(await mail.verify());
+      if(req.method==='GET'&&url.pathname==='/admin/api/comments'){
+        if(!comments)return json({error:'评论暂不可用'},503);
+        return json(comments.list({moderation:true,q:url.searchParams.get('q'),cursor:url.searchParams.get('cursor')}));
+      }
+      const commentMatch=url.pathname.match(/^\/admin\/api\/comments\/(\d+)$/);
+      if(req.method==='PATCH'&&commentMatch){
+        if(!comments)return json({error:'评论暂不可用'},503);
+        const body=await bodyJSON(req);
+        if(Object.keys(body).some(k=>k!=='hidden'))throw fail(400,'评论设置无效');
+        return json(comments.moderate(Number(commentMatch[1]),body.hidden));
       }
       if(req.method==='GET'&&url.pathname==='/admin/api/overview'){
         const config=await readItemOverrides(store);

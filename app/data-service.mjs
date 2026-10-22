@@ -1,11 +1,14 @@
-import { MARKETS, MODEL_VERSION, EVENT_METADATA_VERSION, applyEventMetadata, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
+import { MARKETS, MODEL_VERSION, EVENT_METADATA_VERSION, CATEGORY_METADATA_VERSION, applyEventMetadata, applyCategoryMetadata, normalizeSnapshot, normalizeProfile, collectLoot, collectFlips, collectCrafts, analyzeHistory, analyzeHistorySummary, mergeRecentQuotes, quoteStatus, feeBasePrice, isShortOpportunity } from './model.mjs';
 import { DASHBOARD_VERSION, compactSignals, makeDashboard } from './dashboard.mjs';
 import { checkSptUpstream } from './spt-upstream.mjs';
 import { classifiedDashboard } from './item-overrides.mjs';
 const MINUTE=60000, DAY=86400000;
-const cache=new class extends Map{
-  set(key,value){super.delete(key);super.set(key,value);while(this.size>16)this.delete(this.keys().next().value);return this;}
-}(), inflight=new WeakMap(), encodedDashboards=new WeakMap(), dashboardReadAt=new WeakMap();
+function boundedCache(limit){return new class extends Map{
+  get(key){const value=super.get(key);if(super.has(key)){super.delete(key);super.set(key,value);}return value;}
+  set(key,value){super.delete(key);super.set(key,value);while(this.size>limit)this.delete(this.keys().next().value);return this;}
+}();}
+// Detail-chart traffic must not evict the three large market bundles.
+const cache=boundedCache(16),historyCache=boundedCache(64),historyRetryAt=boundedCache(128),inflight=new WeakMap(),encodedDashboards=new WeakMap(),dashboardReadAt=new WeakMap();
 const keyFor=(store,key)=>`${store.namespace}:${key}`;
 async function once(store,key,fn) {
   // R2 stores are created per request. Do not share an in-flight I/O promise across
@@ -50,8 +53,8 @@ async function cachedSource(store,market,name,maxAge) {
 export async function snapshot(store,market) {
   const key=`snapshot/${market}.json`,memoryKey=keyFor(store,key);
   return once(store,memoryKey,async()=>{
-    const prior=applyEventMetadata(cache.get(memoryKey)||await store.read(key));
-    if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&prior.imageVersion===1&&prior.categoryMetadataVersion===1&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
+    const prior=applyCategoryMetadata(applyEventMetadata(cache.get(memoryKey)||await store.read(key)));
+    if(prior?.version===2&&prior.modelVersion===MODEL_VERSION&&prior.profileMetadataVersion===2&&prior.imageVersion===1&&prior.categoryMetadataVersion===CATEGORY_METADATA_VERSION&&Date.now()-Date.parse(prior.fetchedAt)<5*MINUTE)return prior;
     try{
       const parts={},names=['items','items_zh','items_en','traders','hideout','barters','crafts','tasks','tasks_zh'];
       for(let index=0;index<names.length;index+=6){
@@ -117,18 +120,27 @@ export async function profitHistory(store,market,now=Date.now()) {
   const value={market,days:records.length,records};
   cache.set(key,{at:now,value});return value;
 }
-export async function history(store,market,id) {
+export async function history(store,market,id,{waitUntil}={}) {
   const key=`history/${market}/${id}.json`,memoryKey=keyFor(store,key);
-  return once(store,memoryKey,async()=>{
-    const old=cache.get(memoryKey)||await store.read(key);
-    if(old&&Date.now()-old.at<30*MINUTE)return old;
+  const download=old=>once(store,'refresh/'+memoryKey,async()=>{
     try{
       const raw=await upstream(`${market}/prices/${id}`);
       if(!Array.isArray(raw.data))throw new Error('历史数据格式异常');
       const cutoff=Date.now()-32*DAY;
       const result={market,id,at:Date.now(),points:raw.data.filter(p=>p.timestamp>=cutoff&&p.priceMin>0)};
-      await store.write(key,result);cache.set(memoryKey,result);return result;
-    }catch(error){if(old)return {...old,warning:'历史数据暂未更新'};throw error;}
+      await store.write(key,result);historyCache.set(memoryKey,result);historyRetryAt.delete(memoryKey);return result;
+    }catch(error){
+      historyRetryAt.set(memoryKey,Date.now()+MINUTE);
+      if(old)return {...old,warning:'历史数据暂未更新'};throw error;
+    }
+  });
+  return once(store,memoryKey,async()=>{
+    const old=historyCache.get(memoryKey)||await store.read(key);
+    if(old)historyCache.set(memoryKey,old);
+    if(old&&Date.now()-old.at<30*MINUTE)return old;
+    if(old&&(historyRetryAt.get(memoryKey)||0)>Date.now())return {...old,warning:'历史数据暂未更新'};
+    if(old&&waitUntil){waitUntil(download(old).catch(()=>{}));return {...old,warning:'历史数据更新中'};}
+    return download(old);
   });
 }
 export async function scanSignals(store,data,limit=12) {
@@ -188,7 +200,7 @@ export async function digest(store,market,origin) {
   return {version:1,market,generatedAt:data.fetchedAt,source:data.source,delivery:'read-only; no QQ messages sent',items,
     text:[`塔科夫赚钱监控 · ${MARKETS[market]}`,...items.slice(0,5).map(i=>`${i.name} · 预计${i.basis==='before-fuel'?'扣燃料前':''}收益 ₽${i.profit.toLocaleString('zh-CN')}`),`${origin}/?market=${market}`].join('\n')};
 }
-const validDashboard=value=>value?.version===DASHBOARD_VERSION&&value.modelVersion===MODEL_VERSION&&value.snapshot?.eventMetadataVersion===EVENT_METADATA_VERSION;
+const validDashboard=value=>value?.version===DASHBOARD_VERSION&&value.modelVersion===MODEL_VERSION&&value.snapshot?.eventMetadataVersion===EVENT_METADATA_VERSION&&value.snapshot?.categoryMetadataVersion===CATEGORY_METADATA_VERSION;
 async function saveDashboard(store,data,book) {
   const result=makeDashboard(data,book,await profitHistory(store,data.market));
   await store.write(`dashboard/${data.market}.json`,result);
@@ -226,7 +238,7 @@ export async function dashboard(store,market,waitUntil) {
     if(!validDashboard(ready)){
       // Upgrade existing caches without making the visitor wait for new histories.
       const cached=await store.read(`snapshot/${market}.json`);
-      const data=cached?.version===2&&cached.modelVersion===MODEL_VERSION?applyEventMetadata(cached):await snapshot(store,market);
+      const data=cached?.version===2&&cached.modelVersion===MODEL_VERSION?applyCategoryMetadata(applyEventMetadata(cached)):await snapshot(store,market);
       ready=await saveDashboard(store,data,await store.read(`signals/${market}.json`));
     }
     cache.set(memoryKey,ready);
@@ -242,21 +254,26 @@ export async function handleApi(request,store,context={}) {
     const isDashboard=Boolean(value?.snapshot&&value.version===DASHBOARD_VERSION);
     let body=isDashboard?encodedDashboards.get(value):null;
     if(!body){body=JSON.stringify(value);if(isDashboard)encodedDashboards.set(value,body);}
-    return new Response(body,{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
+    const responseHeaders={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers};
+    // The Node transport can reuse one encoded public buffer across concurrent readers.
+    return context.jsonResponse?context.jsonResponse(body,status,responseHeaders):new Response(body,{status,headers:responseHeaders});
   };
   if(request.method!=='GET')return json({error:'只支持读取'},405);
   if(!Object.hasOwn(MARKETS,market))return json({error:'未知市场'},400);
   try{
     if(url.pathname==='/api/dashboard'){
-      const ready=await classifiedDashboard(store,await dashboard(store,market,context.waitUntil)),etag=`"dashboard-${market}-${ready.preparedAt}-${DASHBOARD_VERSION}-c${ready.snapshot.classificationRevision}"`;
+      const ready=await classifiedDashboard(store,await dashboard(store,market,context.waitUntil)),etag=`W/"dashboard-${market}-${ready.preparedAt}-${DASHBOARD_VERSION}-c${ready.snapshot.classificationRevision}"`;
       const headers={'ETag':etag,'Cache-Control':'public, max-age=30, stale-while-revalidate=60'};
-      if(request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers});
+      if((request.headers.get('If-None-Match')||'').split(',').some(value=>value.trim()==='*'||value.trim().replace(/^W\//,'')===etag.replace(/^W\//,'')))return new Response(null,{status:304,headers});
       return json(ready,200,headers);
     }
     if(url.pathname==='/api/snapshot')return json((await classifiedDashboard(store,await dashboard(store,market,context.waitUntil))).snapshot);
     if(url.pathname==='/api/history'){
       const id=url.searchParams.get('id');if(!/^[0-9a-f]{24}$/.test(id||''))return json({error:'物品 ID 无效'},400);
-      return json(await history(store,market,id));
+      const result=await history(store,market,id,{waitUntil:context.waitUntil}),etag=`W/"history-${market}-${id}-${result.at}-${result.warning?'stale':'fresh'}"`;
+      const headers={'ETag':etag,'Cache-Control':'public, max-age=60, stale-while-revalidate=300'};
+      if((request.headers.get('If-None-Match')||'').split(',').some(value=>value.trim().replace(/^W\//,'')===etag.replace(/^W\//,'')))return new Response(null,{status:304,headers});
+      return json(result,200,headers);
     }
     if(url.pathname==='/api/signals')return json((await dashboard(store,market,context.waitUntil)).signals);
     if(url.pathname==='/api/ledger')return json(await profitHistory(store,market));

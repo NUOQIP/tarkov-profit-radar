@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow"><title>管理端 · 塔科夫赚钱监控</title>
-  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/admin/admin.css">
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/admin/admin.css"><link rel="stylesheet" href="/community.css"><link rel="stylesheet" href="/accounts.css">
   <script type="module" src="/admin/admin.js"></script>
 </head>
 <body>
@@ -15,14 +15,17 @@
       <p id="login-error" class="error" role="alert"></p><div class="login-decoration" aria-hidden="true">01 / OPERATOR ACCESS</div>
     </section>
     <section id="workspace" hidden>
-      <div class="page-heading"><div><span class="eyebrow">ITEM CLASSIFICATION</span><h1>物品管理</h1></div><span class="scope">分类修改同步所有市场</span></div>
+      <div class="page-heading"><div><span class="eyebrow" id="admin-section">ITEM CLASSIFICATION</span><h1 id="admin-title">物品管理</h1></div><span class="scope" id="admin-scope">分类修改同步所有市场</span></div>
       <div id="overview" class="overview" aria-label="服务状态"></div>
-      <div class="catalog">
+      <nav class="admin-tabs" aria-label="管理功能"><button type="button" data-admin-tab="items" aria-pressed="true">物品</button><button type="button" data-admin-tab="comments" aria-pressed="false">评论</button><button type="button" data-admin-tab="mail" aria-pressed="false">邮箱</button></nav>
+      <div class="catalog" id="item-catalog">
         <form id="filters" class="toolbar" role="search"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索物品名称或 ID" aria-label="搜索物品名称或 ID" maxlength="160"></label><label><span class="sr-only">报价市场</span><select id="market"><option value="pve">PVE</option><option value="regular">PVP 常规</option><option value="pvp-season">PVP 赛季</option></select></label><label><span class="sr-only">活动分类</span><select id="event-filter"><option value="">全部物品</option><option value="true">活动物品</option><option value="false">非活动物品</option></select></label><label class="modified-filter"><input id="modified" type="checkbox">仅看已修改</label><button id="reload" type="button" aria-label="刷新物品">刷新</button></form>
         <div class="catalog-heading"><span id="total">载入物品…</span><span>选择物品编辑</span></div>
         <div id="table-wrap" class="table-wrap" aria-busy="false"><table><thead><tr><th>物品</th><th>类型</th><th>活动分类</th><th>稀有度</th><th><span class="sr-only">编辑</span></th></tr></thead><tbody id="items"></tbody></table><p id="empty" class="empty" hidden>没有找到物品，试试其他名称或筛选。</p></div>
         <div class="pagination"><button id="previous" type="button">← 上一页</button><span id="page-label"></span><button id="next" type="button">下一页 →</button></div>
       </div>
+      <section class="catalog" id="community-panel" hidden><div class="moderation-toolbar"><input id="comment-search" type="search" placeholder="搜索评论、昵称或物品" aria-label="搜索评论"><button type="button" id="comments-reload">刷新</button></div><div id="moderation-comments"></div><div class="moderation-footer"><span id="moderation-total"></span><button type="button" id="comments-more" hidden>加载更多</button></div></section>
+      <section class="catalog mail-settings" id="mail-panel" hidden><form id="mail-form"><label class="mail-wide">发信服务<select id="mail-provider"><option value="qq">QQ 邮箱</option><option value="exmail">腾讯企业邮箱</option><option value="netease163">163 邮箱</option><option value="netease126">126 邮箱</option><option value="custom">自定义 SMTP</option></select></label><label>SMTP 主机<input id="mail-host" required placeholder="smtp.qq.com" autocomplete="off"></label><label>端口<select id="mail-port"><option value="465">465 · TLS</option><option value="587">587 · STARTTLS</option><option value="25">25 · STARTTLS</option></select></label><label class="mail-wide">发信账号<input id="mail-user" type="email" required autocomplete="off" placeholder="example@qq.com"></label><label class="mail-wide">发件人邮箱<input id="mail-from" type="email" autocomplete="off" placeholder="留空使用发信账号"></label><label class="mail-wide">邮箱授权码<input id="mail-password" type="password" maxlength="1000" autocomplete="new-password" placeholder="填写 SMTP 授权码"></label><label class="mail-wide mail-enabled"><input id="mail-enabled" type="checkbox">启用验证码邮件</label><p class="mail-wide">玩家可使用任意常见邮箱注册，与这里选择的发信服务无关。</p><div class="mail-wide mail-actions"><button type="submit" class="primary">保存配置</button><button type="button" id="mail-verify">检查连接</button></div><p class="mail-wide" id="mail-message" role="status"></p></form></section>
       <details class="maintenance"><summary>维护信息 <span>上游状态 / 最近修改</span></summary><div id="maintenance-content"></div></details>
     </section>
   </main>

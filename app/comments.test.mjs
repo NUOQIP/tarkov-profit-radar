@@ -1,0 +1,101 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve,sep} from 'node:path';
+import {createCommentsStore as createRawCommentsStore} from './comments-store.mjs';
+import {createCommentsHandler} from './comments-service.mjs';
+import {createAdminHandler} from './admin-service.mjs';
+import {createRadarServer} from './http-server.mjs';
+import {passwordCredential} from './admin-auth.mjs';
+import {DatabaseSync,backup} from 'node:sqlite';
+const bulb={id:'5d1b392c86f77425243e98fe',name:'电灯泡'},gpu={id:'57347ca924597744596b4e71',name:'显示卡'};
+const entry=(item=bulb,text='海关工具箱能找到',market='pve')=>({item,nickname:'玩家',text,market});
+const createCommentsStore=(...args)=>{const store=createRawCommentsStore(...args);return {...store,add:(value,ip,user)=>store.add(value,ip,user||{id:ip,nickname:value.nickname||'SCAV'})};};
+test('comments persist, paginate by item, preserve text and never expose author fingerprints',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'radar-comments-'));assert(directory.startsWith(resolve(tmpdir())+sep));
+  const path=join(directory,'comments.sqlite');let db=createCommentsStore(path);
+  t.after(async()=>{db.close();await rm(directory,{recursive:true,force:true});});
+  for(let n=0;n<25;n++)db.add(entry(bulb,'工具箱刷点 '+n,n%2?'regular':'pve'),'player-'+n);
+  db.add(entry(gpu,'显卡刷点'),'other-player');db.close();db=createCommentsStore(path);
+  const first=db.list({itemId:bulb.id,limit:20});assert.equal(first.total,25);assert.equal(first.comments.length,20);assert(first.nextCursor);
+  const second=db.list({itemId:bulb.id,cursor:first.nextCursor});assert.equal(second.comments.length,5);assert.equal(second.nextCursor,null);
+  assert.equal(new Set([...first.comments,...second.comments].map(c=>c.id)).size,25);
+  assert(!JSON.stringify(first).includes('author'));assert(!JSON.stringify(first).includes('player-'));
+  assert.equal(db.list({moderation:true,q:'电灯泡'}).total,25);assert.equal(db.list({moderation:true,q:null}).total,26);
+  assert.equal(db.list({moderation:true,q:"%' OR 1=1 --"}).total,0);
+  const copy=join(directory,'comments-backup.sqlite'),reader=new DatabaseSync(path,{readOnly:true});
+  try{await backup(reader,copy);}finally{reader.close();}
+  const restored=createCommentsStore(copy);assert.equal(restored.list({moderation:true}).total,26);restored.close();
+});
+test('moderation hides publicly, retains recoverable comments and restores the same record',t=>{
+  const db=createCommentsStore(':memory:');t.after(()=>db.close());const posted=db.add(entry(),'one-player');
+  assert.equal(db.list({itemId:bulb.id}).total,1);db.moderate(posted.id,true);
+  assert.equal(db.list({itemId:bulb.id}).total,0);assert.equal(db.list({moderation:true}).comments[0].hidden,true);
+  db.moderate(posted.id,false);assert.equal(db.list({itemId:bulb.id}).comments[0].id,posted.id);
+  assert.throws(()=>db.moderate(999,true),{status:404});assert.throws(()=>db.moderate(posted.id,'false'),{status:400});
+});
+
+test('numbered comment pages contain five rows and recover when moderation removes the last page',t=>{
+  const db=createCommentsStore(':memory:');t.after(()=>db.close());
+  for(let n=0;n<12;n++)db.add(entry(bulb,'分页评论 '+n),'pagination-'+n);
+  const pages=[1,2,3].map(page=>db.list({itemId:bulb.id,limit:5,page}));
+  assert.deepEqual(pages.map(x=>x.comments.length),[5,5,2]);
+  assert.deepEqual(pages.map(x=>x.page),[1,2,3]);assert(pages.every(x=>x.totalPages===3&&x.pageSize===5));
+  assert.equal(new Set(pages.flatMap(x=>x.comments.map(c=>c.id))).size,12);
+  assert.deepEqual(db.list({itemId:bulb.id,limit:5,page:1}).comments,pages[0].comments);
+  for(const comment of pages[2].comments)db.moderate(comment.id,true);
+  const last=db.list({itemId:bulb.id,limit:5,page:3});assert.equal(last.page,2);assert.equal(last.totalPages,2);assert.equal(last.comments.length,5);
+  const newest=db.add(entry(bulb,'新发布置于第一页'),'new-pagination-user');
+  assert.equal(db.list({itemId:bulb.id,limit:5,page:1}).comments[0].id,newest.id);
+  const empty=db.list({itemId:gpu.id,limit:5,page:9});assert.equal(empty.page,1);assert.equal(empty.totalPages,1);assert.deepEqual(empty.comments,[]);
+  for(const page of ['NaN',0,-1,1.5,100001])assert.throws(()=>db.list({itemId:bulb.id,page}),{status:400});
+});
+
+test('public comment pages stay at five entries while admin cursor pagination remains independent',async t=>{
+  const comments=createCommentsStore(':memory:');t.after(()=>comments.close());
+  for(let n=0;n<12;n++)comments.add(entry(bulb,'接口分页 '+n),'http-pagination-'+n);
+  const server=createRadarServer({},new Map(),{commentsHandler:createCommentsHandler(comments,{findItem:async()=>bulb})});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const origin='http://127.0.0.1:'+server.address().port,endpoint=origin+'/api/comments?item='+bulb.id;
+  const first=await(await fetch(endpoint+'&limit=100')).json(),second=await(await fetch(endpoint+'&page=2')).json();
+  assert.equal(first.comments.length,5);assert.equal(first.pageSize,5);assert.equal(first.totalPages,3);assert.equal(second.comments.length,5);assert.equal(second.page,2);
+  assert.equal(new Set([...first.comments,...second.comments].map(x=>x.id)).size,10);
+  const legacy=await(await fetch(endpoint+'&cursor='+first.nextCursor)).json();assert.deepEqual(legacy.comments,second.comments);
+  assert.equal((await fetch(endpoint+'&page=zero')).status,400);
+  assert.equal(comments.list({moderation:true}).comments.length,12);
+});
+test('posting validates bounds, isolates visitors, rejects duplicates and limits floods',t=>{
+  let now=Date.parse('2026-10-22T08:00:00Z');const db=createCommentsStore(':memory:',{now:()=>now});t.after(()=>db.close());
+  for(const bad of [{text:'一'},{text:'字'.repeat(501)},{nickname:'人'.repeat(21)},{nickname:'A\nB'},{text:'xx\0yy'},{market:'unknown'}])assert.throws(()=>db.add({...entry(),...bad},'one'),{status:400});
+  db.add(entry(),'one');assert.throws(()=>db.add(entry(),'one'),{status:409});
+  db.add(entry(bulb,'第二条评论'),'one');db.add(entry(bulb,'第三条评论'),'one');assert.throws(()=>db.add(entry(bulb,'第四条评论'),'one'),{status:429});
+  assert(db.add(entry(),'different-player').id);now+=300001;assert(db.add(entry(bulb,'五分钟后可以发布'),'one').id);
+  assert.throws(()=>db.list({itemId:'../admin'}),{status:400});assert.throws(()=>db.list({cursor:'NaN'}),{status:400});
+});
+test('public comment writes require same origin and admin moderation requires session and CSRF',async t=>{
+  const comments=createCommentsStore(':memory:');t.after(()=>comments.close());
+  const password='test-private-password-123',credential=await passwordCredential(password);
+  const commentsHandler=createCommentsHandler(comments,{findItem:async id=>id===bulb.id?bulb:null,requireUser:()=>({user:{id:'verified-user',nickname:'<img src=x>'}})});
+  const adminHandler=createAdminHandler({}, {readCredential:async()=>credential,comments});
+  const server=createRadarServer({},new Map(),{commentsHandler,adminHandler});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const origin='http://127.0.0.1:'+server.address().port,endpoint='/api/comments?item='+bulb.id+'&market=pve';
+  const send=(path,method='GET',body,headers={})=>fetch(origin+path,{method,headers:{'Content-Type':'application/json',Origin:origin,...headers},...(body?{body:JSON.stringify(body)}:{})});
+  assert.equal((await send(endpoint,'POST',{text:'来自外站的请求'},{Origin:'https://example.com'})).status,403);
+  assert.equal((await send(endpoint,'POST',{text:'网页自动填表',website:'https://spam.test'})).status,400);
+  assert.equal((await send(endpoint,'POST',{text:'字'.repeat(5000)})).status,413);
+  assert.equal((await send('/api/comments?item='+'0'.repeat(24))).status,404);
+  const posted=await send(endpoint,'POST',{text:'<script>alert(1)</script> 这段应作为文字显示'});assert.equal(posted.status,201);
+  const {comment}=await posted.json();const visible=await(await send(endpoint)).json();assert.equal(visible.comments[0].text,comment.text);assert(!JSON.stringify(visible).includes('author'));
+  assert.equal((await send('/admin/api/comments')).status,401);
+  const login=await send('/admin/api/login','POST',{password}),loginBody=await login.json();
+  const Cookie=login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await send('/admin/api/comments/'+comment.id,'PATCH',{hidden:true},{Cookie})).status,403);
+  const auth={Cookie,'X-CSRF-Token':loginBody.csrf};
+  assert.equal((await send('/admin/api/comments/'+comment.id,'PATCH',{hidden:true},auth)).status,200);
+  assert.equal((await(await send(endpoint)).json()).total,0);
+  assert.equal((await(await send('/admin/api/comments','GET',null,auth)).json()).comments[0].hidden,true);
+  assert.equal((await send('/admin/api/comments/'+comment.id,'PATCH',{hidden:false},auth)).status,200);
+  assert.equal((await(await send(endpoint)).json()).total,1);
+});

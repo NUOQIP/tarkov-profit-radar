@@ -42,7 +42,7 @@ install -d -o tarkov-radar -g tarkov-radar -m 0700 /var/lib/tarkov-radar/admin
 install -d -m 0700 /var/backups/tarkov-radar
 release="$base/releases/$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 0755 "$release"
-cp -R -- "$source_dir/app" "$source_dir/public" "$source_dir/deploy" "$source_dir/scripts" "$source_dir/RELEASE.json" "$release/"
+cp -R -- "$source_dir/app" "$source_dir/public" "$source_dir/deploy" "$source_dir/scripts" "$source_dir/node_modules" "$source_dir/RELEASE.json" "$release/"
 find "$release" -type d -exec chmod 0755 {} +
 find "$release" -type f -exec chmod 0644 {} +
 previous=$(readlink -f "$base/current" || true)

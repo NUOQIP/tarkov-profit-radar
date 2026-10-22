@@ -1,58 +1,95 @@
-// Dense cells with larger highlights. All matching items remain scrollable.
-export function quicklookLayout(items,{width=640,height=420,compact=false,spotlight=true,showAll=false,previous=null}={}){
-  const rowHeight=compact?76:88;
-  const columns=Math.max(1,Math.min(32,Math.floor((width+7)/(compact?72:82))));
-  const viewportRows=Math.max(1,Math.floor((height+7)/(rowHeight+7)));
-  const ranked=[...new Map(items.filter(r=>Number.isFinite(r.slotValue)&&r.slotValue>0).map(r=>[r.id,r])).values()]
-    .sort((a,b)=>(b.quicklookScore??b.slotValue)-(a.quicklookScore??a.slotValue)||b.slotValue-a.slotValue||a.id.localeCompare(b.id));
-  const score=r=>r.quicklookScore??r.slotValue,high=ranked.length?score(ranked[0]):0,low=ranked.length?score(ranked.at(-1)):0;
-  // Score separation sets the visual emphasis; a viewport budget keeps useful
-  // small finds on screen even when many items have similarly strong signals.
-  const budget={large:Math.max(1,Math.min(2,Math.floor(columns*viewportRows*.2/9))),tall:Math.max(1,Math.min(4,Math.floor(columns/4))),medium:Math.max(2,Math.min(6,Math.floor(columns/2)))};
-  const shapes=ranked.map((r,rank)=>{
-    if(!spotlight||columns<3)return {w:1,h:1,tier:'small'};
-    const separation=high>low?(score(r)-low)/(high-low):ranked.length===1?1:.5;
-    const position=ranked.length===1?1:1-rank/(ranked.length-1);
-    const prominence=separation*.75+position*.25;
-    if(columns>=4&&prominence>=.95&&budget.large>0){budget.large--;const size=columns>=6?3:2;return {w:size,h:size,tier:'large'};}
-    if(columns>=6&&prominence>=.86&&budget.tall>0){budget.tall--;return {w:2,h:2,tier:'tall'};}
-    if(prominence>=.68&&budget.medium>0){budget.medium--;return {w:2,h:1,tier:'medium'};}
-    return {w:1,h:1,tier:'small'};
-  });
-  const shape=rank=>shapes[rank];
-  const area=ranked.reduce((sum,_,rank)=>{const s=shape(rank);return sum+s.w*s.h;},0);
-  const capacityRows=showAll?Math.max(viewportRows,Math.ceil(area/columns)+2):viewportRows;
-  function pack(retained=[]){
-    const occupied=new Set(),cells=[],placed=new Set();
-    const fits=(x,y,w,h)=>x+w<=columns&&y+h<=capacityRows&&Array.from({length:w*h},(_,n)=>(y+Math.floor(n/w))*columns+x+n%w).every(k=>!occupied.has(k));
-    function place(cell){
-      cells.push(cell);placed.add(cell.id);
-      for(let y=cell.y;y<cell.y+cell.h;y++)for(let x=cell.x;x<cell.x+cell.w;x++)occupied.add(y*columns+x);
-    }
-    for(const c of retained)if(fits(c.x,c.y,c.w,c.h))place({...c});
-    let cursor=0;
-    for(let rank=0;rank<ranked.length;rank++){
-      const item=ranked[rank];if(placed.has(item.id))continue;
-      const desired=shape(rank);
-      while(occupied.has(cursor))cursor++;
-      if(cursor>=columns*capacityRows)break;
-      let position=-1;
-      for(let n=cursor;n<columns*capacityRows;n++)if(fits(n%columns,Math.floor(n/columns),desired.w,desired.h)){position=n;break;}
-      const size=position>=0?desired:{w:1,h:1,tier:'small'};
-      if(position<0)position=cursor;
-      place({id:item.id,x:position%columns,y:Math.floor(position/columns),...size});
-    }
-    const order=new Map(ranked.map((r,i)=>[r.id,i]));cells.sort((a,b)=>order.get(a.id)-order.get(b.id));
-    return cells;
+import {isCommonFind,compareLootPriority} from './loot-priority.mjs';
+
+const MIN_SIDE=4,GAP=4;
+const distance=(r,w,h)=>Math.hypot((r.x+r.w/2-w/2)/(w/2),(r.y+r.h/2-h/2)/(h/2));
+
+// A centre-anchored treemap: carve one focal card, then divide the remaining
+// rectangles. Every split conserves area, so there are no holes to patch later.
+function mosaic(columns,rows,count,familiarCount){
+  const root={x:0,y:0,w:columns,h:rows},rectangles=[];
+  if(count<5||columns<MIN_SIDE*3&&rows<MIN_SIDE*3)rectangles.push(root);
+  else {
+    const framedX=columns>=MIN_SIDE*3,framedY=rows>=MIN_SIDE*3;
+    const area=columns*rows,heroArea=Math.max(Math.sqrt(area*MIN_SIDE**2*1.8),area/Math.max(2,count)*1.8);
+    const w=framedX?Math.max(MIN_SIDE,Math.min(columns-MIN_SIDE*2,Math.round(Math.sqrt(heroArea*1.1)))):columns;
+    const h=framedY?Math.max(MIN_SIDE,Math.min(rows-MIN_SIDE*2,Math.round(heroArea/w))):rows;
+    const x=Math.floor((columns-w)/2),y=Math.floor((rows-h)/2);
+    rectangles.push({x,y,w,h,focal:true});
+    if(y)rectangles.push({x:0,y:0,w:columns,h:y});
+    if(y+h<rows)rectangles.push({x:0,y:y+h,w:columns,h:rows-y-h});
+    if(x)rectangles.push({x:0,y,w:x,h});
+    if(x+w<columns)rectangles.push({x:x+w,y,w:columns-x-w,h});
   }
-  let cells=pack();
-  const selected=new Map(cells.map(c=>[c.id,c]));
-  // Keep unchanged tiers still during quote ticks, while promoting new highlights.
-  if(previous?.columns===columns){
-    cells=pack(previous.cells.filter(c=>selected.get(c.id)?.tier===c.tier&&c.y+c.h<=capacityRows));
+  // The desired area falls smoothly with distance, leaving a few larger cards
+  // near the centre and many small ones outside. Dimensions never drop below
+  // the readable minimum. This is independent of item price outliers.
+  const boost=Math.max(10,columns*rows/(Math.max(12,Math.min(24,familiarCount||20))*MIN_SIDE**2)*1.4);
+  const target=r=>MIN_SIDE**2*(1+boost*Math.exp(-4*distance(r,columns,rows)**2));
+  function division(rect){
+    if(rect.focal)return null;
+    let best=null;
+    for(const axis of ['w','h']){
+      const extent=rect[axis];if(extent<MIN_SIDE*2)continue;
+      for(let cut=MIN_SIDE;cut<=extent-MIN_SIDE;cut++){
+        const a={...rect,[axis]:cut},b={...rect,[axis]:extent-cut,...(axis==='w'?{x:rect.x+cut}:{y:rect.y+cut})};
+        const imbalance=Math.abs(Math.log((a.w*a.h/target(a))/(b.w*b.h/target(b))));
+        const aspect=Math.abs(Math.log(a.w/a.h))+Math.abs(Math.log(b.w/b.h));
+        const cost=imbalance+.35*aspect;
+        if(!best||cost<best.cost-1e-9)best={a,b,cost};
+      }
+    }
+    return best;
   }
-  const rows=showAll?Math.max(1,...cells.map(c=>c.y+c.h)):viewportRows;
-  return {columns,rows,rowHeight,cells};
+  // Cache split candidates per rectangle; resizing is cheap and price-only
+  // refreshes can retain the previous plan entirely.
+  const candidates=new Map();
+  for(const r of rectangles)candidates.set(r,division(r));
+  while(rectangles.length<count){
+    let choice=null,score=1.55;
+    for(const r of rectangles){
+      const split=candidates.get(r),aspect=Math.max(r.w/r.h,r.h/r.w);
+      const s=Math.max(r.w*r.h/target(r),aspect>2.2?1.56:0);
+      if(split&&s>score){choice=r;score=s;}
+    }
+    if(!choice)break;
+    const {a,b}=candidates.get(choice),index=rectangles.indexOf(choice);
+    rectangles.splice(index,1,a,b);candidates.delete(choice);candidates.set(a,division(a));candidates.set(b,division(b));
+  }
+  // Highest priorities own the largest tiles, with centrality breaking ties.
+  // Since common finds lead the ranking, expensive rare finds cannot take over.
+  return rectangles.sort((a,b)=>Number(Boolean(b.focal))-Number(Boolean(a.focal))||b.w*b.h-a.w*a.h||distance(a,columns,rows)-distance(b,columns,rows)||a.y-b.y||a.x-b.x);
+}
+
+export function quicklookLayout(items,{width=640,height=420,compact=false,lookup=false,previous=null}={}){
+  const unit=Math.max(12,Math.min(compact?14:16,Math.floor(Math.min(width,height)/28)));
+  const columns=Math.max(MIN_SIDE,Math.min(96,Math.floor((width+GAP)/(unit+GAP))));
+  const primaryRows=Math.max(MIN_SIDE,Math.floor((height+GAP)/(unit+GAP)));
+  const rowHeight=Math.max(1,(height-GAP*(primaryRows-1))/primaryRows);
+  const ranked=[...new Map(items.filter(r=>lookup||Number.isFinite(r.slotValue)&&r.slotValue>0).map(r=>[r.id,r])).values()];
+  if(!lookup)ranked.sort(compareLootPriority);
+  const signature=ranked.map(r=>`${r.id}:${isCommonFind(r)?1:0}`).sort().join('|');
+  if(previous?.columns===columns&&previous.primaryRows===primaryRows&&previous.rowHeight===rowHeight&&previous.lookup===lookup&&previous.signature===signature)return previous;
+  let cells=[];
+  if(lookup){
+    const w=Math.min(columns,6),h=6,perRow=Math.max(1,Math.floor(columns/w));
+    cells=ranked.map((r,i)=>({id:r.id,x:i%perRow*w,y:Math.floor(i/perRow)*h,w,h,tier:'standard',group:'lookup'}));
+  }else if(ranked.length){
+    const common=ranked.filter(isCommonFind),other=ranked.filter(r=>!isCommonFind(r));
+    const rects=mosaic(columns,primaryRows,ranked.length,common.length);
+    const sizes=[...new Set(rects.filter(r=>!r.focal).map(r=>r.w*r.h))].sort((a,b)=>b-a);
+    // Retain a few high-value reminders on small screens while the familiar
+    // finds keep the larger central tiles. Nothing is duplicated or fabricated.
+    const reminders=Math.min(other.length,Math.floor(rects.length*.2));
+    const commonCount=Math.min(common.length,rects.length-reminders);
+    const selected=[...common.slice(0,commonCount),...other,...common.slice(commonCount)].slice(0,rects.length);
+    cells=rects.map((r,i)=>{
+      const step=sizes.length>1?Math.min(3,Math.floor(4*sizes.indexOf(r.w*r.h)/sizes.length)):3;
+      const tier=rects.length>1&&r.focal?'large':['medium','standard','small','micro'][step];
+      return {id:selected[i].id,x:r.x,y:r.y,w:r.w,h:r.h,tier,group:'cloud'};
+    });
+  }
+  const rows=cells.length?(lookup?Math.max(...cells.map(c=>c.y+c.h)):primaryRows):0;
+  return {columns,rows,primaryRows,rowHeight,tracks:Array(rows).fill(rowHeight),sections:[],cells,lookup,signature,hidden:ranked.length-cells.length,height:rows*rowHeight+GAP*Math.max(0,rows-1)};
 }
 export function opportunityTone(row,signal={}){
   if(row.kind!=='loot'&&Number.isFinite(row.profit)&&row.profit<0)return 'loss';

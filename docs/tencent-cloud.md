@@ -1,8 +1,16 @@
 # 腾讯云香港部署
 
-公测入口：**[塔科夫赚钱监控](https://101.33.32.33/)**，管理入口为 **[/admin/](https://101.33.32.33/admin/)**。
+公测入口：**[塔科夫赚钱监控](https://tarkovlootradar.lanluz.xin/)**，管理入口为 **[/admin/](https://tarkovlootradar.lanluz.xin/admin/)**。
 
 使用轻量应用服务器运行 Node 服务和 Nginx，无需另购数据库。现有 Sites 预览与腾讯云数据独立，正式访问以上述入口为准。
+
+新迭代先在本机预览，检查确认后再上传发布。评论使用 Node 24 内置 SQLite，数据留在 `/var/lib/tarkov-radar/community/`；图片缓存位于数据目录的 `media/`，可重新生成。生产打包会生成压缩、带内容版本的客户端资源，自动使用一年缓存；入口 HTML 每次验证，发布后自动取得新资源。
+
+## 现有实例更新
+
+本机执行 `node scripts/package-update.mjs 20261023`，把生成的更新包上传到 `/home/ubuntu`，按包内「执行说明.txt」操作。更新器检查包、备份数据、切换程序并验证账号与资源，失败恢复原程序。账号、会话、评论、邮件配置、图片缓存和现有 Nginx 域名配置由服务器保留；更新包不含私密数据。
+
+域名通过 Cloudflare 代理，SSL/TLS 使用完全（严格）。Nginx 的域名站点只信任 Cloudflare 官方网段的真实 IP 头，避免玩家共用同一个限流计数。域名证书使用 `/etc/letsencrypt/live/radar-domain/`，自动续期已验证。需要重新配置时使用 `deploy/tencent/setup-domain.sh`。
 
 ## 本次试用配置
 
@@ -118,11 +126,15 @@ systemctl list-timers --all | grep certbot
 | 备份计划 | `systemctl list-timers tarkov-radar-backup.timer` |
 | 收益备份 | `/var/backups/tarkov-radar/ledger-*.tar.gz` |
 | 分类与密码摘要备份 | `/var/backups/tarkov-radar/admin-*.tar.gz` |
+| 评论备份 | `/var/backups/tarkov-radar/comments-*.sqlite` |
+| 账号与条件备份 | `/var/backups/tarkov-radar/accounts-*.sqlite` |
 | 当前版本 | `/opt/tarkov-radar/current/RELEASE.json` |
 
-每天01:15 UTC（北京时间09:15）附近备份已结束日期的收益档案，以及管理员分类和密码摘要，保留约14天；当日收益档案在次日纳入。同盘备份只能应对误改，需定期把备份下载到本机；退订或销毁服务器前先保存数据。管理备份不含明文密码，但仍应私下保管。
+每天01:15 UTC（北京时间09:15）附近备份已结束日期的收益档案、管理员配置、账号与评论，保留约14天；当日收益档案在次日纳入。账号和评论通过 SQLite 在线备份保存，包含 WAL 已提交数据。同盘备份只能应对误改，需定期把备份下载到本机；退订或销毁服务器前先保存数据。管理备份包含 SMTP 授权码，应私下保管。
 
 升级：上传新包，解压到新的目录，再运行安装器。它会切换版本并做存活检查，失败时回退已有旧版本；随后仍要执行完整核验。若存活正常但业务有问题，停止服务，将 `current` 链接切回 `/opt/tarkov-radar/releases/` 中核实过的旧版本，重启后再次核验。安装器保留已有 Nginx 网站配置。
+
+首次升级账号功能时，将现有 `/etc/nginx/sites-available/tarkov-radar` 中的 `client_max_body_size` 从 `8k` 调整为 `512k`，执行 `sudo nginx -t` 通过后再重新加载 Nginx。完整的玩家条件可能超过8KB；应用仍独立限制登录、评论等小请求与账号设置请求的大小。新安装模板已包含此调整。
 
 关注内存、磁盘、采集失败率、接口响应时间和公网出流量。套餐不自动续费不等于阻止所有流量费；试用到期前决定续费、迁移或停止并释放实例。
 
