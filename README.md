@@ -2,7 +2,7 @@
 
 面向《逃离塔科夫》玩家的中文赚钱看板：捡什么、卖给谁、倒什么货、搓什么更划算。
 
-**[进入网站](https://tarkov-profit-radar-nuoqip.cloudy-otter-5459.chatgpt.site/) · [反馈问题](https://github.com/NUOQIP/tarkov-profit-radar/issues)**
+**[进入网站](https://101.33.32.33/) · [反馈问题](https://github.com/NUOQIP/tarkov-profit-radar/issues)**
 
 支持 **PVE / PVP 常规 / PVP 赛季**，市场数据独立。适配桌面、旁屏、平板和手机，无需游戏账号。
 
@@ -60,15 +60,15 @@ Windows 桌面快捷方式调用同一个启动器。重复启动会复用已有
 
 ## 公测部署
 
-现有公开网址使用 **Cloudflare Worker + R2**，与本机服务独立运行。没有域名和固定公网入口时，可先用现有网址公测。
+公测网站部署在 **腾讯云香港**，通过 HTTPS 访问，无需本机保持开机。三个市场每5分钟自动采集，服务开机自启，每日备份。
 
-提供 **腾讯云部署包**：面向 Ubuntu 24.04，含开机启动、异常重启、每日数据备份与升级回退。安装与上线步骤见 [腾讯云部署](docs/tencent-cloud.md)。
+使用 **Ubuntu 24.04 + Node 24 LTS + Nginx**，无需独立数据库。IP 证书自动续期；后台登录、分类修改和行情数据由同一服务管理。部署、升级与恢复见 [腾讯云部署](docs/tencent-cloud.md)。
 
 ```sh
 node scripts/package-tencent.mjs
 ```
 
-本机服务默认仅监听本机，桌面快捷方式不会自动获得公网地址。其他部署方式和容量边界见 [部署说明](docs/deployment.md)。
+本机服务默认仅监听本机，桌面快捷方式用于本地调试。原 Sites 预览与腾讯云数据独立，正式入口以上方网址为准。其他部署方式和容量边界见 [部署说明](docs/deployment.md)。
 
 托管版本构建：
 
