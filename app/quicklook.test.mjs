@@ -34,7 +34,7 @@ test('five visual sizes form a centre with smaller peripheral cards and a visibl
   assert.ok(average(centre)>average(outside)*2);
   assert.ok(plan.hidden>0);assert.ok(plan.cells.every(c=>c.y+c.h<=plan.primaryRows));
 });
-test('quote refreshes preserve positions; explicit repacking and rarity changes update the ranking',()=>{
+test('cached renders preserve positions; a fresh plan applies updated ranking and rarity',()=>{
   const size={width:1150,height:550},previous=quicklookLayout(items,size);
   const updated=items.map(r=>({...r,slotValue:r.slotValue+500}));
   assert.deepEqual(quicklookLayout(updated,{...size,previous}).cells,previous.cells);
@@ -70,9 +70,10 @@ test('compact and sparse selections remain bounded, and rare-only presets retain
   const preset=quicklookLayout(items.slice(25),size),hero=preset.cells.find(c=>c.tier==='large');
   valid(preset,{full:true});assert.ok(hero);assert.ok(distance(hero,preset)<.05);
 });
-test('loss color wins over stale signals and short-term color wins over long-term',()=>{
+test('only price opportunities and losses carry a status color',()=>{
   assert.equal(opportunityTone({kind:'flip',profit:-1},{short:true,long:true}),'loss');
-  assert.equal(opportunityTone({kind:'craft',profit:1},{long:true}),'long');
+  assert.equal(opportunityTone({kind:'craft',profit:1},{long:true}),'');
+  assert.equal(opportunityTone({kind:'loot'},{long:true}),'');
   assert.equal(opportunityTone({kind:'loot'},{short:true,long:true}),'short');
   assert.equal(opportunityTone({kind:'flip',profit:null},{}),'');
 });

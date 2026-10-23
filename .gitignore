@@ -40,3 +40,6 @@ outputs/
 /public/row-cache.mjs
 /public/terminal.css
 /public/ui-motion.mjs
+/public/archive.css
+/public/archive-crafts.css
+/public/archive-details.css

@@ -93,5 +93,5 @@ export function quicklookLayout(items,{width=640,height=420,compact=false,lookup
 }
 export function opportunityTone(row,signal={}){
   if(row.kind!=='loot'&&Number.isFinite(row.profit)&&row.profit<0)return 'loss';
-  return signal.short?'short':signal.long?'long':'';
+  return signal.short?'short':'';
 }

@@ -25,6 +25,7 @@ export function migrateWorkspaceViews(saved, market) {
   };
   return Object.fromEntries(PAGES.map(page => {
     const {lootScope,quicklookRange,...view} = raw[page] || {};
-    return [page,{...view,...(!supportsSurgeFilter(page)&&view.filter==='short'?{filter:'all'}:{}),criteria:{...view.criteria,...(page === 'run' ? {minSlot:0} : {})}}];
+    const retiredFilter=(!supportsSurgeFilter(page)&&view.filter==='short')||(page==='run'&&view.filter==='favorites');
+    return [page,{...view,...(retiredFilter?{filter:'all'}:{}),criteria:{...view.criteria,...(page === 'run' ? {minSlot:0} : {})}}];
   }));
 }

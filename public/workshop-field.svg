@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 640" fill="none" style="color:#a2ada7" aria-labelledby="title description">
+  <title id="title">工位陈列背景</title>
+  <desc id="description">低对比的斜向工位块面，右后侧设施轮廓、单侧刻度和半开放定位角，中央留白用于展示物品。</desc>
+  <g fill="currentColor">
+    <path d="M162 435 407 294 657 420 411 563Z" opacity=".13"/>
+    <path d="M411 563 657 420V461L411 603Z" opacity=".25"/>
+    <path d="M162 435 411 563V603L162 476Z" opacity=".07"/>
+    <path d="M527 106 643 164V375L527 317Z" opacity=".09"/>
+    <path d="M643 164 678 144V354L643 375Z" opacity=".2"/>
+    <path d="M527 106 562 86 678 144 643 164Z" opacity=".18"/>
+    <path d="m549 130 72 36v8l-72-36Z" opacity=".45"/>
+    <path d="m549 156 72 36v76l-72-36Z" opacity=".06"/>
+    <path d="m578 248 43 22v36l-43-22Z" opacity=".13"/>
+    <path d="m198 446 29-17 6 3-29 17Z" opacity=".58"/>
+    <path d="m223 459 29-17 6 3-29 17Z" opacity=".36"/>
+    <path d="m248 472 29-17 6 3-29 17Z" opacity=".18"/>
+    <path d="M418 574 464 548V555L418 582Z" opacity=".65"/>
+  </g>
+  <g stroke="currentColor" stroke-width="1" stroke-linejoin="miter" opacity=".45">
+    <path d="M162 435 407 294 657 420 411 563 162 435V476L411 603 657 461V420"/>
+    <path d="M411 563V603M184 435 407 307 633 420" opacity=".5"/>
+    <path d="M527 282V106L562 86 678 144V354L643 375 588 347"/>
+    <path d="M527 106 643 164 678 144M643 164V375"/>
+    <path d="M549 204V156L621 192V268L578 246" opacity=".5"/>
+    <path d="M188 382 188 361 229 338M549 445 589 422V400" stroke-width="2" opacity=".85"/>
+    <path d="M315 311 358 286M486 508 530 482" opacity=".55"/>
+  </g>
+  <g stroke="currentColor" stroke-width="1" opacity=".4">
+    <path d="M127 219V405M127 236H143M127 253H134M127 270H134M127 287H139M127 304H134M127 321H134M127 338H143M127 355H134M127 372H134M127 389H139"/>
+    <path d="M127 200V193H151M127 418V426H151" stroke-width="2" opacity=".8"/>
+    <path d="M196 519 383 615M186 514 192 503M389 619 395 608" opacity=".45"/>
+    <path d="M462 82H510M462 82V99M696 179V226" opacity=".5"/>
+  </g>
+</svg>

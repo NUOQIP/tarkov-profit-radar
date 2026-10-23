@@ -15,7 +15,7 @@ export async function clientAssets(root,files){
   }
   const result=new Map(files),html=await readFile(join(root,'app/index.html'),'utf8');
   const rendered=html.replace('href="/radar.css"',`href="${manifest.style.path}"`)
-    .replace(/<link rel="stylesheet" href="\/(?:community|accounts|terminal)\.css">/g,'')
+    .replace(/<link rel="stylesheet" href="\/(?:community|accounts|terminal|archive(?:-crafts|-details)?)\.css">/g,'')
     .replace('src="/radar.js"',`src="${manifest.script.path}"`)
     .replace('</head>',`<link rel="modulepreload" href="${manifest.script.path}"></head>`);
   result.set('/',[null,'text/html',{body:Buffer.from(rendered)}]);

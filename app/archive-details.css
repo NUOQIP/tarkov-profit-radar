@@ -1,0 +1,250 @@
+/* Industrial archive drawers. Reading order and scrolling remain unchanged. */
+:is(#detail-dialog,#filters,#settings,#account-dialog){
+ --drawer-surface:#1b2022;--drawer-gutter:25px;--drawer-rule:#ffffff17;
+ background:var(--drawer-surface);border-left-color:#84948a66;box-shadow:-20px 0 60px #0003;
+ overflow:hidden;
+}
+:is(#detail-dialog,#filters,#settings,#account-dialog) :is(.drawer-top,.dialog-heading){
+ position:relative;flex:none;background:var(--paper);color:var(--paper-ink);
+ border:0;border-bottom:1px solid #20292c2b;padding-left:var(--drawer-gutter);padding-right:var(--drawer-gutter);
+}
+:is(#detail-dialog,#filters,#settings,#account-dialog) :is(.drawer-top,.dialog-heading)::after{
+ content:'';position:absolute;bottom:-1px;left:var(--drawer-gutter);width:28px;height:3px;
+ background:#3b4540;pointer-events:none;
+}
+#detail-dialog .drawer-top{min-height:64px;padding-top:15px;padding-bottom:15px;font-size:12px;font-weight:500;letter-spacing:.3px}
+#detail-dialog .drawer-top>span::before{display:none}
+:is(#filters,#settings,#account-dialog) .dialog-heading{padding-top:23px;padding-bottom:24px;margin-bottom:22px}
+#account-dialog>.dialog-heading{margin-bottom:0}
+:is(#filters,#settings,#account-dialog) .dialog-heading h2{font-size:25px;font-weight:600;line-height:1.4;letter-spacing:.3px}
+:is(#filters,#settings,#account-dialog) .dialog-heading .eyebrow{font-size:9px;letter-spacing:1.8px;color:#64706a;margin-bottom:7px}
+:is(#detail-dialog,#filters,#settings,#account-dialog) :is(.drawer-top,.dialog-heading) .icon-button{
+ width:34px;height:34px;flex:none;border:1px solid #25302b2e;background:transparent;color:var(--paper-ink);
+}
+:is(#detail-dialog,#filters,#settings,#account-dialog) :is(.drawer-top,.dialog-heading) .icon-button:hover{
+ background:#26302b0c;border-color:#25302b70;color:var(--paper-ink);
+}
+:is(#detail-dialog,#filters,#settings,#account-dialog) :is(.drawer-top,.dialog-heading) .icon-button:focus-visible{outline-color:var(--paper-ink)}
+
+/* The rail is inset from the frame, with the header outside the scrolling area. */
+#detail-content{padding:25px var(--drawer-gutter) 30px;margin:0 5px 6px 0}
+:is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll){
+ min-height:0;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:thin;
+ scrollbar-color:#98a59c66 transparent;
+}
+:is(#filters,#settings) .settings-scroll{padding-left:var(--drawer-gutter);padding-right:var(--drawer-gutter);margin-right:5px}
+#account-dialog .account-scroll{padding:26px var(--drawer-gutter) 32px;margin:0 5px 6px 0}
+@supports selector(::-webkit-scrollbar){
+ :is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll){scrollbar-width:auto;scrollbar-color:auto}
+ :is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll)::-webkit-scrollbar{width:7px}
+ :is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll)::-webkit-scrollbar-track{background:transparent}
+ :is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll)::-webkit-scrollbar-thumb{
+  background:#98a59c66;border:2px solid var(--drawer-surface);border-radius:6px;background-clip:padding-box;
+ }
+ :is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll)::-webkit-scrollbar-thumb:hover{background-color:#b3c0b699}
+ :is(#detail-content,#filters .settings-scroll,#settings .settings-scroll,#account-dialog .account-scroll)::-webkit-scrollbar-button{display:none;width:0;height:0}
+}
+
+/* Identity, outcome, decision, evidence: separate groups rather than ruled rows. */
+#detail-content .detail-identity{display:grid;grid-template-columns:96px minmax(0,1fr);gap:19px;align-items:center}
+#detail-content .detail-identity .item-picture{width:96px;height:112px;background:none;border:0;box-shadow:none}
+#detail-content .detail-identity .item-picture img{max-width:100%;max-height:100%;filter:drop-shadow(5px 8px 5px #0005)}
+#detail-content .detail-identity h2{font-size:22px;line-height:1.5;letter-spacing:0;overflow-wrap:anywhere}
+#detail-content .detail-identity .item-category{font-size:11px;line-height:1.6;margin-top:6px;color:var(--muted)}
+#detail-content .detail-identity .item-category:empty{display:none}
+#detail-content .detail-actions{gap:8px;margin:17px 0 23px}
+#detail-content .detail-actions button{min-height:33px;padding:6px 10px;font-size:11px;background:transparent;border-color:var(--drawer-rule)}
+#detail-content .detail-actions button:hover{background:#ffffff05;border-color:#8d999466}
+#detail-content .detail-metrics{gap:10px;margin-bottom:25px}
+#detail-content .detail-metric{
+ position:relative;padding:17px 19px;background:var(--card-fill);border:1px solid var(--card-border);
+ clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);
+}
+#detail-content .detail-metric::before{content:'';position:absolute;left:-1px;top:15px;height:19px;width:3px;background:var(--card-signal)}
+#detail-content .detail-metric small{font-size:11px;letter-spacing:.1px;color:var(--muted)}
+#detail-content .detail-metric strong{margin-top:5px;line-height:1.25;font-weight:500;font-variant-numeric:tabular-nums}
+#detail-content .detail-metrics:not(.profit-focus) .detail-metric strong{font-size:clamp(17px,6.3cqw,31px);letter-spacing:-.6px}
+#detail-content .detail-metrics.profit-focus .detail-metric{display:block;padding:18px 20px}
+#detail-content .detail-metrics.profit-focus strong{font-size:clamp(29px,8.3cqw,41px);letter-spacing:-.8px;white-space:nowrap}
+#detail-content .detail-section{margin-top:27px;border:0;padding-top:0}
+#detail-content :is(.detail-section,.item-comments) h3{
+ display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-bottom:13px;padding:0;border:0;
+ font-size:13px;font-weight:500;letter-spacing:.1px;line-height:1.5;
+}
+#detail-content :is(.detail-section,.item-comments) h3::before{
+ content:'';width:6px;height:6px;flex:none;background:#a7b4a9;
+ clip-path:polygon(0 0,100% 0,100% 60%,60% 100%,0 100%);
+}
+#detail-content :is(.detail-section,.item-comments) h3::after{display:none}
+#detail-content .detail-section h3>:is(.chart-controls,.count){margin-left:auto}
+#detail-content :is(.execution-detail,.trade-execution,.purchase-detail,.market-evidence){
+ position:relative;background:#ffffff02;border:1px solid var(--drawer-rule);border-radius:0;
+}
+#detail-content :is(.execution-detail,.trade-execution,.purchase-detail,.market-evidence)::before,
+#account-dialog :is(.account-markets,.account-choice)::before{
+ content:'';position:absolute;top:-1px;left:11px;width:7px;height:1px;background:var(--drawer-surface);pointer-events:none;
+}
+#detail-content :is(.execution-detail,.trade-execution,.purchase-detail,.market-evidence)::after,
+#account-dialog :is(.account-markets,.account-choice)::after{
+ content:'';position:absolute;top:-1px;left:0;width:9px;height:1px;background:#8d999477;pointer-events:none;
+}
+#detail-content .channel-comparison{gap:10px}
+#detail-content .channel-comparison>div{position:relative;min-width:0;padding:15px;background:#ffffff02;border-color:var(--drawer-rule)}
+#detail-content .channel-comparison>div.chosen{background:var(--card-fill);border-color:#8d99947a}
+#detail-content .channel-comparison>div.chosen::before{content:'';position:absolute;left:-1px;top:13px;width:2px;height:15px;background:var(--card-signal)}
+#detail-content .channel-comparison>div>span{font-size:12px}
+#detail-content .channel-comparison strong{margin-top:9px;font-size:clamp(16px,6cqw,27px);line-height:1.35;letter-spacing:-.5px}
+#detail-content .channel-comparison small{font-size:11px;line-height:1.6;margin-top:7px}
+#detail-content .channel-difference{font-size:11px;padding-top:11px;gap:8px}
+#detail-content .channel-difference b{font-size:17px;font-weight:500}
+#detail-content :is(.execution-detail,.trade-execution,.market-evidence){padding:17px}
+#detail-content .trade-execution{margin-top:26px}
+#detail-content .trade-execution-heading{margin-bottom:18px}
+#detail-content .trade-execution-heading h3{font-size:13px;font-weight:500}
+#detail-content .execution-state{font-size:10px}
+#detail-content .execution-overview{gap:14px;align-items:baseline;font-size:11px}
+#detail-content .execution-overview strong{font-size:14px;line-height:1.5}
+#detail-content .trade-route{gap:8px}
+#detail-content .route-step strong{font-size:12px}
+#detail-content .route-step small{font-size:10px}
+#detail-content .trade-limit{border:0;margin-top:17px;padding-top:0;font-size:11px}
+#detail-content .trade-limit b{font-size:14px}
+#detail-content .craft-reference{padding-top:16px;gap:16px}
+#detail-content .craft-reference b{font-size:21px;font-weight:500;line-height:1.25}
+#detail-content .condition-list .tag{padding:3px 7px;font-size:10px;border-color:#ffffff1f;background:#ffffff02}
+#detail-content .trade-summary{padding:17px;gap:19px 16px;font-size:11px}
+#detail-content .trade-summary b{font-size:23px;line-height:1.3;font-weight:500;margin-top:5px}
+#detail-content .trade-summary .cost-breakdown b{font-size:17px}
+#detail-content .cost-materials{position:relative;border:0;padding:6px 16px 5px;gap:0}
+#detail-content .cost-materials::before{
+ content:'';position:absolute;top:0;left:16px;right:16px;height:1px;pointer-events:none;
+ background:linear-gradient(90deg,#8d999466 0 9px,transparent 9px 15px,#ffffff12 15px calc(100% - 14px),transparent calc(100% - 14px));
+}
+#detail-content .cost-material{min-height:66px;padding:12px 0;gap:11px;border:0;background:transparent}
+#detail-content .cost-material:hover{background:#ffffff04}
+#detail-content .cost-material-name strong{font-size:12px;line-height:1.5;font-weight:500}
+#detail-content .cost-material-name small{font-size:10px;line-height:1.6;margin-top:4px}
+#detail-content .cost-material-name em{font-style:normal;color:var(--muted);white-space:nowrap}
+#detail-content .cost-material-value b{font-size:18px;font-weight:500;white-space:nowrap}
+#detail-content .quote-reference{padding-bottom:20px;gap:15px;font-size:11px}
+#detail-content .quote-reference b{font-size:20px;font-weight:500;line-height:1.25}
+#detail-content .quote-reference .quote-count{font-size:10px}
+#detail-content .chart-controls button{font-size:10px;min-height:27px;padding:4px 9px;border-color:#ffffff20}
+#detail-content .chart-controls button.active{border-color:var(--paper)}
+#detail-content .history-summary{font-size:10px;line-height:1.6;gap:8px 14px}
+#detail-content .related-route{
+ min-height:68px;padding:13px 14px;gap:11px;background:#ffffff02;border:1px solid var(--drawer-rule);
+}
+#detail-content .related-route:hover{background:#ffffff05;border-color:#8d999466}
+#detail-content .related-route>img{width:33px;height:38px;object-fit:contain;flex:none;margin:0}
+#detail-content .related-route strong{font-size:12px;font-weight:500;line-height:1.5}
+#detail-content .related-route small{font-size:10px;line-height:1.6}
+#detail-content .related-profit b{font-size:18px;letter-spacing:-.2px;color:var(--neutral-ink)}
+#detail-content .related-profit b.negative{color:var(--loss-ink)!important}
+#detail-content .more-routes summary{padding:10px 0;font-size:11px;color:var(--muted)}
+#detail-content .detail-source{border-top:0;padding-top:0;margin-top:23px;font-size:11px}
+#detail-content .item-comments>h3 .count{margin-left:auto;padding:0;border:0;font-size:11px}
+#detail-content :is(.comment-login,.comment-form){padding:16px;background:#ffffff02;border-color:var(--drawer-rule)}
+#detail-content .comment-form :is(input,textarea){background:#14191b;font-size:13px;border-color:#ffffff25}
+#detail-content .comment-form textarea{min-height:100px}
+
+/* Personal conditions, filters and sign-in use the same quiet field rhythm. */
+:is(#filters,#settings) :is(.dialog-heading,.settings-tabs,.settings-backup,.dialog-actions){flex:none}
+#settings .settings-tabs{padding:0 var(--drawer-gutter) 18px;gap:4px}
+#settings .settings-tabs button{min-height:38px;font-size:12px;background:transparent;border:1px solid var(--drawer-rule);color:var(--muted)}
+#settings .settings-tabs button[aria-pressed=true]{background:var(--paper);color:var(--paper-ink);border-color:var(--paper)}
+:is(#filters,#settings) .settings-grid{gap:20px 16px;margin:14px 0 20px}
+:is(#filters,#settings) .settings-grid label{gap:8px;font-size:12px;line-height:1.5}
+:is(#filters,#settings) :is(.settings-grid input,.settings-grid select,.station-setting select,#task-search){
+ min-height:41px;font-size:13px;background:#14191b;border:1px solid #ffffff25;color:var(--ink);
+}
+:is(#filters,#settings) :is(.settings-grid input,.settings-grid select,.station-setting select,#task-search):hover{border-color:#8d999466}
+#settings .player-level-setting{position:relative;background:#ffffff02;border:1px solid var(--drawer-rule);padding:15px 16px}
+#settings .player-level-setting::before{content:'';position:absolute;left:-1px;top:16px;width:2px;height:19px;background:var(--neutral-mark)}
+#settings .player-level-setting input{font-size:25px}
+#settings .settings-section-head{gap:12px;font-size:12px;margin-top:23px;margin-bottom:12px}
+#settings .station-settings{gap:8px}
+#settings .station-setting{padding:12px 13px;background:#ffffff02;border-color:var(--drawer-rule);font-size:12px}
+#settings .station-setting:has([data-production]:not(:checked)){background:transparent;border-style:solid;opacity:.7}
+#settings .station-setting select{min-height:36px;font-size:12px}
+#settings .station-setting img{filter:grayscale(.45)}
+#settings .task-settings{border:0;padding:8px 0 0}
+#settings .task-settings label{border:0;padding:9px 1px;gap:8px;font-size:12px}
+#settings .task-settings label:hover{background:#ffffff03}
+#settings .settings-backup{padding:13px var(--drawer-gutter);border-top-color:var(--drawer-rule);font-size:11px}
+:is(#filters,#settings) .dialog-actions{padding:15px var(--drawer-gutter);background:#111617;border-top:1px solid var(--drawer-rule)}
+:is(#filters,#settings) .dialog-actions button{min-height:40px;font-size:12px}
+#filters .check-line{font-size:12px;line-height:1.6;min-height:35px}
+#filters .type-choice-heading strong{font-size:12px;font-weight:500}
+#filters .type-choices{gap:8px;margin:14px 0 18px}
+#filters .type-choices label{padding:10px;font-size:12px;background:#ffffff02;border-color:var(--drawer-rule)}
+#filters .type-choices label:has(:checked){background:#8d99940d;border-color:#8d99947a}
+#account-dialog .account-hero{gap:18px;margin-bottom:24px;padding-bottom:0;border:0}
+#account-dialog .account-hero::after{display:none}
+#account-dialog .account-hero strong{font-size:19px;line-height:1.5;font-weight:500}
+#account-dialog .account-hero p{font-size:11px;letter-spacing:0;line-height:1.6;margin-top:6px}
+#account-dialog .account-emblem{width:64px;height:82px;clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%)}
+#account-dialog .account-auth-tabs{gap:4px;border:0;background:none;margin-bottom:24px}
+#account-dialog .account-auth-tabs button{min-height:40px;border:1px solid var(--drawer-rule);padding:9px;font-size:12px}
+#account-dialog .account-auth-tabs button[aria-pressed=true]{background:var(--paper);color:var(--paper-ink);border-color:var(--paper)}
+#account-dialog .account-auth-tabs button[aria-pressed=true]::after{display:none}
+#account-dialog .account-form{gap:19px}
+#account-dialog .account-form label{font-size:12px;gap:8px}
+#account-dialog .account-form input{min-height:44px;padding:11px 12px;background:#14191b;border-color:#ffffff25;font-size:13px}
+#account-dialog .account-form input:focus{border-color:#a7b4a9;outline:1px solid #a7b4a9;outline-offset:2px}
+#account-dialog .account-code-row button{font-size:11px;background:#ffffff03}
+#account-dialog .account-submit,#account-dialog .account-form>.primary{min-height:44px;font-size:13px;font-weight:600}
+#account-dialog .account-message{font-size:11px}
+#account-dialog .account-identity{border:0;margin-bottom:22px;padding-bottom:0}
+#account-dialog .account-identity strong{font-size:15px}
+#account-dialog .account-section-heading h3,#account-dialog .account-choice h3{font-size:14px;font-weight:500}
+#account-dialog .account-markets{position:relative;border-color:var(--drawer-rule)}
+#account-dialog .account-markets>div{background:#ffffff02;padding:16px 12px;gap:9px}
+#account-dialog .account-markets>div+div{border-left:0}
+#account-dialog .account-markets small,#account-dialog .account-markets span{font-size:11px}
+#account-dialog .account-markets strong{font:500 30px/1.2 var(--font-data)}
+#account-dialog .account-choice{position:relative;background:#ffffff02;border:1px solid var(--drawer-rule);padding:17px}
+#account-dialog .account-security{border-top:1px solid var(--drawer-rule)}
+#account-dialog .account-exit{border:0;padding-top:0;margin-top:23px}
+
+@media(max-width:700px){
+ :is(#detail-dialog,#filters,#settings,#account-dialog){--drawer-gutter:20px}
+ #detail-dialog .drawer-top{min-height:60px;padding-top:13px;padding-bottom:13px}
+ :is(#filters,#settings,#account-dialog) .dialog-heading{padding-top:21px;padding-bottom:22px}
+ :is(#filters,#settings,#account-dialog) .dialog-heading h2{font-size:24px}
+ #detail-content{padding-top:23px;padding-bottom:calc(27px + env(safe-area-inset-bottom))}
+ #detail-content .detail-identity{grid-template-columns:86px minmax(0,1fr);gap:17px}
+ #detail-content .detail-identity .item-picture{width:86px;height:104px}
+ #detail-content .detail-identity h2{font-size:20px}
+ #detail-content .detail-metric{padding:16px}
+ #detail-content .detail-metrics.profit-focus .detail-metric{padding:17px 18px}
+ #detail-content .related-route{gap:9px;padding:12px}
+ #detail-content .related-profit b{font-size:17px}
+ #account-dialog .account-scroll{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+ :is(#filters,#settings) .dialog-actions{padding-bottom:max(15px,env(safe-area-inset-bottom))}
+}
+@media(max-width:370px){
+ :is(#detail-dialog,#filters,#settings,#account-dialog){--drawer-gutter:16px}
+ #detail-content .detail-identity{grid-template-columns:74px minmax(0,1fr);gap:13px}
+ #detail-content .detail-identity .item-picture{width:74px;height:94px}
+ #detail-content .detail-identity h2{font-size:18px}
+ #detail-content .detail-metric{padding:14px 13px}
+ #detail-content .channel-comparison>div{padding:13px}
+ #detail-content :is(.execution-detail,.trade-execution,.market-evidence),#detail-content .trade-summary{padding:13px}
+ #detail-content .trade-summary b{font-size:20px}
+ #detail-content .quote-reference b{font-size:18px}
+ #detail-content .cost-materials{padding:5px 13px}
+ #detail-content .cost-materials::before{left:13px;right:13px}
+ #detail-content .related-route{gap:8px;padding:11px}
+ #detail-content .related-route>img{width:29px;height:35px}
+ #detail-content .related-profit b{font-size:15px}
+ #detail-content .related-route strong{font-size:11px}
+ #settings .settings-grid{gap:16px 12px}
+ #settings .station-setting{padding:11px 10px;gap:8px}
+ #settings .station-setting select{width:75px}
+ #settings .dialog-actions{flex-wrap:wrap}
+ #settings .dialog-actions [data-account-status]{flex-basis:100%;min-height:26px}
+ #account-dialog .account-hero{gap:14px}
+ #account-dialog .account-hero strong{font-size:18px}
+ #account-dialog .account-code-row button{min-width:78px;padding:0 8px}
+}

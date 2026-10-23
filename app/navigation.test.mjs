@@ -23,7 +23,7 @@ test('migration splits filters, removes invisible ranges, preserves user selecti
   const next=migrateWorkspaceViews({workspaceViews:{pve:m}},'pve');assert.deepEqual(next,m);
 });
 
-test('only items retain surge filters; retired views reset without losing favorites or conditions',()=>{
+test('retired filters reset without losing other pages favorites or view conditions',()=>{
   for(const market of ['pve','regular','pvp-season']){
     const views={items:{filter:'short'},run:{filter:'short'},flips:{filter:'short',criteria:{budget:200000}},crafts:{filter:'short',station:'water'}};
     const saved={workspaceViews:{[market]:views}},migrated=migrateWorkspaceViews(saved,market);
@@ -31,11 +31,23 @@ test('only items retain surge filters; retired views reset without losing favori
     for(const page of ['run','flips','crafts']){
       assert.equal(migrated[page].filter,'all');
       views[page].filter='favorites';
-      assert.equal(migrateWorkspaceViews(saved,market)[page].filter,'favorites');
+      assert.equal(migrateWorkspaceViews(saved,market)[page].filter,page==='run'?'all':'favorites');
     }
     assert.equal(migrated.flips.criteria.budget,200000);assert.equal(migrated.crafts.station,'water');
     assert.deepEqual(migrateWorkspaceViews({workspaceViews:{[market]:migrated}},market),migrated);
   }
+});
+
+test('old run favorites reset across local and account restore while keeping search and types',()=>{
+  const saved={workspaceViews:{pve:{items:{filter:'favorites'},run:{filter:'favorites',search:'LEDX',quicklookTypes:['medical'],quicklookTypesRevision:3,ignoreFleaLevel:false},flips:{filter:'favorites'},crafts:{filter:'favorites'}}}};
+  for(const source of [JSON.parse(JSON.stringify(saved)),normalizeAccountSettings(saved)]){
+    const restored=migrateWorkspaceViews(source,'pve');
+    assert.equal(restored.run.filter,'all');
+    assert.deepEqual(restored.run.quicklookTypes,['medical']);
+    assert.equal(restored.run.ignoreFleaLevel,false);
+    for(const page of ['items','flips','crafts'])assert.equal(restored[page].filter,'favorites');
+  }
+  assert.equal(migrateWorkspaceViews(saved,'pve').run.search,'LEDX');
 });
 test('new independent views do not leak category/search across pages or markets',()=>{
   const saved={workspaceViews:{pve:{items:{category:'weapon',search:'SA58'},run:{quicklookTypes:['keys'],search:'钥匙'}},regular:{run:{search:'不同市场'}}}};

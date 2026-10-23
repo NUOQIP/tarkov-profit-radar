@@ -41,7 +41,7 @@ for(const market of ['pve','regular','pvp-season']){
     ageMinutes:Math.round(ageMinutes*10)/10,loadMs:first.ms,cacheMs:cached.ms,
     compressedBytes:Number(first.response.headers.get('content-length'))||null});
 }
-for(const path of ['/','/radar.js','/radar.css','/engine.js','/quicklook.js','/update-window.js','/navigation.mjs','/loot-priority.mjs','/spt-rarity.mjs','/media.mjs','/comments-ui.js','/community.css','/accounts-ui.js','/account-sync.mjs','/accounts.css','/dashboard-client.mjs','/row-cache.mjs','/fence.webp','/favicon.svg','/admin/admin.js','/admin/admin.css']){
+for(const path of ['/','/radar.js','/radar.css','/terminal.css','/archive.css','/archive-crafts.css','/archive-details.css','/ui-motion.mjs','/workshop-field.svg','/engine.js','/quicklook.js','/update-window.js','/navigation.mjs','/loot-priority.mjs','/spt-rarity.mjs','/media.mjs','/comments-ui.js','/community.css','/accounts-ui.js','/account-sync.mjs','/accounts.css','/dashboard-client.mjs','/row-cache.mjs','/fence.webp','/favicon.svg','/admin/admin.js','/admin/admin.css']){
   const asset=await get(path);ensure(asset.response.ok&&asset.body.length>0,`Asset missing: ${path}`);
 }
 const page=await get('/'),built=[...new Set([...page.body.matchAll(/(?:src|href)="(\/assets\/radar-[0-9a-f]{16}\.(?:js|css))"/g)].map(match=>match[1]))];

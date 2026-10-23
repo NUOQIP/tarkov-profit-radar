@@ -87,8 +87,7 @@ export function createInterfaceMotion(){
     stopWithin(content);
     try{update();}catch(error){ghost?.remove();throw error;}
     if(ghost)play(ghost,[{opacity:.8,transform:'translateX(0)'},{opacity:0,transform:`translateX(${-direction*6}px)`}],{duration:160,easing:leave}).then(()=>ghost.remove());
-    reveal(query('.page-heading'),{direction,distance:7,duration:300});
-    reveal(query('.context-toolbar'),{direction,distance:5,delay:35,duration:300});
+    reveal(query('.context-toolbar'),{direction,distance:7,duration:300});
     return reveal(content,{direction,distance:12,delay:55,duration:390});
   }
   function nav(){
@@ -187,8 +186,7 @@ export function createInterfaceMotion(){
     nav();
     if(reduced())return;
     navRoot?.querySelectorAll('[data-page]').forEach((element,index)=>play(element,[{opacity:0},{opacity:1}],{duration:320,delay:index*30}));
-    reveal(query('.page-heading'),{distance:8,delay:100,duration:380});
-    reveal(query('.context-toolbar'),{distance:6,delay:145,duration:350});
+    reveal(query('.context-toolbar'),{distance:6,delay:100,duration:350});
   });
   const revealReady=()=>reveal(query('#monitor-panel'),{distance:10,delay:Math.max(60,200-(performance.now()-startupTime)),duration:420});
   if(document.body.dataset.loading==='true'){
